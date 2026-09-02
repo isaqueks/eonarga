@@ -1,4 +1,4 @@
-import { Activity, Users } from "lucide-react";
+import { Newspaper, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -33,7 +33,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           title="Novidades"
           className={cn("ml-auto", headerIcon)}
         >
-          <Activity className="size-5" aria-hidden />
+          <Newspaper className="size-5" aria-hidden />
         </Link>
 
         <Link href="/galera" aria-label="Galera" title="Galera" className={headerIcon}>

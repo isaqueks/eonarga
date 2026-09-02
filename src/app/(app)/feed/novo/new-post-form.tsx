@@ -159,6 +159,15 @@ export function NewPostForm({
     setPreview(null);
   }
 
+  /** "Tirar foto" abre a câmera no celular; "Da galeria" deixa o navegador oferecer os arquivos. */
+  function openPhotoPicker(source: "camera" | "gallery") {
+    const input = photoInputRef.current;
+    if (!input) return;
+    if (source === "camera") input.setAttribute("capture", "environment");
+    else input.removeAttribute("capture");
+    input.click();
+  }
+
   const canPublish = chosen !== null && (hasPhoto || body.trim().length > 0);
 
   return (
@@ -170,12 +179,13 @@ export function NewPostForm({
 
       {/* 1. Foto (opcional) */}
       <section className="flex flex-col gap-2">
+        {/* Um input só: "Tirar foto" liga o `capture` (abre a câmera no celular) e
+            "Da galeria" tira, pra o navegador oferecer os arquivos. */}
         <input
           ref={photoInputRef}
           type="file"
           name="photo"
           accept="image/*"
-          capture="environment"
           className="sr-only"
           aria-label="Foto do post"
           onChange={handlePhotoChange}
@@ -196,15 +206,26 @@ export function NewPostForm({
             </Button>
           </div>
         ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            className="h-12 justify-start text-base"
-            onClick={() => photoInputRef.current?.click()}
-          >
-            📷 Foto
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-12 flex-1 text-base"
+              onClick={() => openPhotoPicker("camera")}
+            >
+              📷 Tirar foto
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-12 flex-1 text-base"
+              onClick={() => openPhotoPicker("gallery")}
+            >
+              🖼️ Da galeria
+            </Button>
+          </div>
         )}
         {state.fieldErrors?.photo ? (
           <p role="alert" className="text-destructive text-xs">
