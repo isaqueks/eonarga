@@ -15,7 +15,7 @@ Fases curtas, cada uma termina com algo usável. A ordem é a dependência real:
 - [x] GitHub Actions: lint + typecheck + vitest + build
 - [x] `scripts/generate-icons.ts` + `public/icons` gerados do `eonarga.jpg`; `manifest.ts`
 - [x] `src/lib/ranking.ts` com testes (adiantado da Fase 3)
-- [ ] `docker compose up` testado de ponta a ponta (fica pra Fase 5, no VPS)
+- [x] Imagem Docker testada de ponta a ponta no VPS (Fase 5)
 
 **Pronto quando**: abrir `http://localhost:3000` mostra o cachorro e "E o narga?". Feito em 02/09/2026.
 
@@ -81,8 +81,8 @@ Fases curtas, cada uma termina com algo usável. A ordem é a dependência real:
 
 ## Fase 5 — Deploy
 
-- [ ] Domínio `eonarga.com.br` na Cloudflare apontando pro VPS (proxy ligado, SSL "Full")
-- [ ] VPS compartilhado: imagem construída local e enviada, `compose.prod.yml` em `127.0.0.1:3010`, site no Caddy do sistema (ver [02](./02-stack-e-arquitetura.md#como-está-de-fato-no-ar))
+- [x] Domínio `eonarga.com.br` na Cloudflare apontando pro VPS (proxy ligado)
+- [x] VPS compartilhado: imagem `eonarga:0.1.0` construída local e enviada, `compose.prod.yml` em `127.0.0.1:3010`, site no Caddy do sistema (ver [02](./02-stack-e-arquitetura.md#como-está-de-fato-no-ar)). No ar em 02/09/2026
 - [ ] Backup diário (Litestream ou cron) + restore testado
 - [ ] Criar contas da galera, mandar link no grupo
 
