@@ -111,10 +111,12 @@ export function ReviewEditor({
 
   return (
     <div className={cn("border-input flex flex-col overflow-hidden rounded-lg border", className)}>
+      {/* Estática de propósito: com `sticky`, no celular ela descolava do topo do editor
+          quando o teclado abria e ficava flutuando por cima do texto que a pessoa digitava. */}
       <div
         role="toolbar"
         aria-label="Formatação"
-        className="border-border bg-card sticky top-14 z-10 flex flex-wrap gap-0.5 border-b p-1"
+        className="border-border bg-card flex flex-wrap gap-0.5 border-b p-1"
       >
         <ToolButton
           label="Negrito"
