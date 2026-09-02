@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import sharp from "sharp";
 
 import { E2E_ADMIN } from "./fixtures";
 
@@ -132,10 +133,26 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await shot(page, "07-novo-oque");
   await page.getByRole("button", { name: "Salvar lugar" }).click();
 
-  // Ficha
-  await page.waitForURL(/\/lugares\/sebo-do-joao$/);
+  // Passo 3: sua nota (a criação redireciona pra /avaliar?novo=1)
+  await page.waitForURL(/\/lugares\/sebo-do-joao\/avaliar\?novo=1$/);
+  await expect(page.getByText("3 de 3")).toBeVisible();
+  const slider = page.getByRole("slider");
+  await slider.focus();
+  await page.keyboard.press("End");
+  await expect(slider).toHaveAttribute("aria-valuetext", /5,0 de 5/);
+  await page.locator('input[name="verdict"]').fill("Melhor sebo do Centro, sem discussão");
+  await page.locator(".ProseMirror").click();
+  await page.keyboard.type("Achei um Bukowski por cinco reais. ");
+  await page.getByRole("button", { name: "Publicar" }).click();
+
+  // Ficha com a nota
+  await page.waitForURL(/\/lugares\/sebo-do-joao(#avaliacoes)?$/);
   await expect(page.getByRole("heading", { name: /Sebo do João/ })).toBeVisible();
-  await expect(page.getByText("Ninguém deu nota", { exact: false })).toBeVisible();
+  await expect(page.locator("#avaliacoes")).toContainText("Melhor sebo do Centro");
+  await expect(page.locator("#avaliacoes")).toContainText("Bukowski");
+  await expect(page.getByText("5,0").first()).toBeVisible();
+  await expect(page.getByText(/Já foram:/)).toBeVisible();
+  await shot(page, "08b-ficha-com-nota");
   await expect(page.locator("a", { hasText: /Abrir no Maps/i })).toHaveAttribute(
     "href",
     /google\.com\/maps\/search\/\?api=1&query=-27\.\d+,-48\.\d+/,
@@ -154,10 +171,11 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(page.getByText(/Admin quer ir/)).toBeVisible();
   await shot(page, "10-role");
 
-  // Ranking: entra em "Ainda sem nota"
+  // Ranking: primeiro lugar, com o veredito como citação
   await page.goto("/");
-  await expect(page.getByText(/Ainda sem nota/)).toBeVisible();
   await expect(page.getByRole("link", { name: /Sebo do João/ })).toBeVisible();
+  await expect(page.getByText("Melhor sebo do Centro, sem discussão")).toBeVisible();
+  await expect(page.getByText("poucas notas").first()).toBeVisible();
   await page.goto("/?cat=restaurante");
   await expect(page.getByRole("link", { name: /Sebo do João/ })).toHaveCount(0);
   await shot(page, "11-ranking-filtro");
@@ -196,6 +214,32 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(page.getByText(/senha tempor/i).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.locator("code").filter({ hasText: /\w+-\w+-\w+-\d+/ })).toBeVisible();
   await shot(page, "14-admin-usuario-criado");
+
+  // Galera: todo mundo vê todo mundo
+  await page.goto("/galera");
+  await expect(page.getByRole("heading", { name: "Galera" })).toBeVisible();
+  await expect(page.getByText("Admin", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Ana Teste")).toBeVisible();
+  await shot(page, "14b-galera");
+
+  // Foto de perfil: envia um PNG gerado na hora
+  await page.goto("/perfil");
+  const png = await sharp({
+    create: { width: 96, height: 96, channels: 3, background: "#f4b942" },
+  })
+    .png()
+    .toBuffer();
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "foto.png", mimeType: "image/png", buffer: png });
+  await expect(page.locator('img[alt="Admin"]').first()).toHaveAttribute(
+    "src",
+    /\/api\/uploads\/[A-Za-z0-9_-]+/,
+    { timeout: 30_000 },
+  );
+  // "Minhas avaliações" lista o lugar avaliado com link pra ficha.
+  await expect(page.getByText("Minhas avaliações")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Sebo do João/ })).toBeVisible();
 
   // Perfil e sair
   await page.goto("/perfil");

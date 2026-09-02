@@ -56,16 +56,27 @@ Fases curtas, cada uma termina com algo usável. A ordem é a dependência real:
 
 **Meta**: o app cumpre o nome.
 
-- [ ] Editor Tiptap (StarterKit, Link, Placeholder, CharacterCount) com toolbar mobile
-- [ ] `lib/sanitize.ts` com allowlist + testes (payloads clássicos de XSS)
-- [ ] Componente de nota em "nargas" (cachorro), meio ponto, acessível
-- [ ] `/lugares/[slug]/avaliar`: criar/editar, veredito, data, rascunho em localStorage
-- [ ] `lib/ranking.ts` (média bayesiana) + testes
-- [ ] Home = ranking com chips, ordenação, busca, "ainda sem nota", "poucas notas"
-- [ ] Reações com emoji
-- [ ] Selo "Aprovado pelo narga"
+- [x] Editor Tiptap v3 (StarterKit, Link, Placeholder, CharacterCount) com toolbar mobile
+- [x] `lib/sanitize.ts` com allowlist + 15 testes (payloads clássicos de XSS)
+- [x] Componente de nota em "nargas" (cachorro), meio ponto, acessível (`role="slider"`)
+- [x] `/lugares/[slug]/avaliar`: criar/editar, veredito, data, rascunho em localStorage; é o passo 3 do wizard
+- [x] `lib/ranking.ts` (média bayesiana) + testes; ordenações e filtros por query string
+- [x] Home = ranking com chips, ordenação, busca, "ainda sem nota", "poucas notas", veredito mais recente
+- [x] Reações com emoji (otimistas)
+- [x] Selo "Aprovado pelo narga"
 
-**Pronto quando**: 3 amigos avaliaram 5 lugares e o ranking faz sentido pra todo mundo.
+**Pronto quando**: 3 amigos avaliaram 5 lugares e o ranking faz sentido pra todo mundo. Código pronto em 02/09/2026; o critério de verdade depende da galera usar.
+
+## Fase 3b — Galera e foto de perfil (pedido em 02/09/2026)
+
+**Meta**: todo mundo vê todo mundo, com cara.
+
+- [x] Infra de upload: `lib/storage.ts` (disco em `UPLOAD_DIR`, sharp → webp, sem EXIF, thumb), `GET /api/uploads/[id]` com cache imutável, validação por magic bytes e limite de 10 MB
+- [x] `users.avatar_id` (migration 0002), action de trocar/remover foto no perfil, componente `UserAvatar` com fallback de iniciais
+- [x] `/galera`: lista global de usuários (foto, nome, gênero, testosterona, nº de lugares, avaliações, quero ir / já fui), link no header e no perfil
+- [x] Avatares nas listas de "já foram / querem ir" e nas avaliações
+
+**Pronto quando**: você troca sua foto no celular e ela aparece na galera e nas suas avaliações.
 
 ## Fase 4 — PWA e polimento
 

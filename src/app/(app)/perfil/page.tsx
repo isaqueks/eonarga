@@ -1,4 +1,4 @@
-import { Shield } from "lucide-react";
+import { Shield, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { requireUser } from "@/lib/auth/guards";
 
+import { MyReviews } from "./my-reviews";
+import { ProfileAvatar } from "./profile-avatar";
 import { ProfileForm } from "./profile-form";
 
 export const metadata: Metadata = { title: "Perfil" };
@@ -18,6 +20,7 @@ export default async function PerfilPage() {
     <div className="flex flex-col gap-6 p-4">
       <section className="flex flex-col gap-4">
         <h1 className="font-display text-xl">Perfil</h1>
+        <ProfileAvatar name={user.name} avatarId={user.avatarId} />
         <ProfileForm
           name={user.name}
           email={user.email}
@@ -37,6 +40,13 @@ export default async function PerfilPage() {
         >
           Trocar senha
         </Link>
+        <Link
+          href="/galera"
+          className="text-primary flex items-center gap-1.5 text-sm underline-offset-4 hover:underline"
+        >
+          <Users className="size-4" aria-hidden />
+          Galera
+        </Link>
         {user.role === "admin" ? (
           <Link
             href="/admin/usuarios"
@@ -52,7 +62,7 @@ export default async function PerfilPage() {
 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Minhas avaliações</h2>
-        <p className="text-muted-foreground text-sm">Nada ainda.</p>
+        <MyReviews userId={user.id} viewer={{ id: user.id, role: user.role }} />
       </section>
 
       <Separator />

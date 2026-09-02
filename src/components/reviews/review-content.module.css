@@ -1,0 +1,134 @@
+/*
+ * Tipografia do texto rico das avaliações. É o mesmo estilo dentro do editor
+ * (Tiptap) e na leitura da ficha, pra "o que eu escrevi" ser igual a "o que
+ * saiu". Feito à mão porque o projeto não usa @tailwindcss/typography.
+ * As cores vêm dos tokens de `globals.css` (funciona nos dois temas).
+ */
+
+.content {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.content > * {
+  margin: 0;
+}
+
+.content > * + * {
+  margin-top: 0.75em;
+}
+
+.content > * + h2 {
+  margin-top: 1.4em;
+}
+
+.content > * + h3 {
+  margin-top: 1.2em;
+}
+
+.content h2 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.content h3 {
+  font-size: 0.9688rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.content strong {
+  font-weight: 600;
+}
+
+.content em {
+  font-style: italic;
+}
+
+.content s {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+.content ul,
+.content ol {
+  padding-left: 1.35rem;
+}
+
+.content ul {
+  list-style: disc;
+}
+
+.content ol {
+  list-style: decimal;
+}
+
+.content li::marker {
+  color: var(--muted-foreground);
+}
+
+.content li + li,
+.content li > ul,
+.content li > ol {
+  margin-top: 0.25em;
+}
+
+.content blockquote {
+  padding: 0.15rem 0 0.15rem 0.85rem;
+  font-style: italic;
+  color: var(--muted-foreground);
+  /* a borda verde do meme (docs/04) */
+  border-left: 3px solid var(--narga);
+}
+
+.content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.content code {
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--muted);
+  border-radius: 0.35rem;
+}
+
+.content pre {
+  padding: 0.6rem 0.75rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--muted);
+  border-radius: 0.5rem;
+}
+
+.content pre code {
+  padding: 0;
+  background: none;
+}
+
+.content hr {
+  margin: 1.2em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+}
+
+/* Placeholder do Tiptap: a classe vem da extensão, por isso :global. */
+.content :global(.is-editor-empty:first-child)::before {
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--muted-foreground);
+  content: attr(data-placeholder);
+}

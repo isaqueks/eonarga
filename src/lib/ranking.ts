@@ -87,3 +87,14 @@ export function rank<T extends Rankable>(items: T[], globalMeanStars: number): R
 export function globalMean(totalStars: number, totalCount: number): number {
   return totalCount > 0 ? totalStars / totalCount : 3;
 }
+
+/** Ordenações do ranking (query string `?sort=`). */
+export const RANKING_SORTS = ["melhores", "mais-avaliados", "recentes", "piores"] as const;
+export type RankingSort = (typeof RANKING_SORTS)[number];
+
+/** Lê o `?sort=` da URL; qualquer coisa estranha cai em "melhores". */
+export function parseRankingSort(value: unknown): RankingSort {
+  return typeof value === "string" && (RANKING_SORTS as readonly string[]).includes(value)
+    ? (value as RankingSort)
+    : "melhores";
+}

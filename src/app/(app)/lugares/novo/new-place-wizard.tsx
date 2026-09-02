@@ -15,8 +15,9 @@ import type { ParsedMapsLink } from "@/lib/maps-link";
 import { cn } from "@/lib/utils";
 
 const DRAFT_KEY = "eonarga:novo-lugar";
-// TODO(fase3): vira "1 de 3" quando a tela de avaliar existir (o passo 3 é "sua nota").
-const TOTAL_STEPS = 2;
+// O passo 3 ("sua nota") é a própria tela de avaliar: `createPlace` redireciona
+// pra `/lugares/<slug>/avaliar?novo=1`, que mostra "3 de 3" e o "Pular por agora".
+const TOTAL_STEPS = 3;
 
 interface LatLng {
   lat: number;

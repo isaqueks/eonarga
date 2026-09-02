@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
   },
+  experimental: {
+    serverActions: {
+      // O padrão do Next é 1 MB e a foto de perfil pode ter até 10 MB (MAX_UPLOAD_BYTES);
+      // a folga cobre o overhead do multipart. Quem valida o tamanho de fato é a action.
+      bodySizeLimit: "11mb",
+    },
+  },
 };
 
 export default nextConfig;

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { PlacesMapLazy } from "@/components/map/places-map-lazy";
 import { HasNargaBadge } from "@/components/places/has-narga-badge";
 import { mapsSearchUrl } from "@/components/places/maps-buttons";
+import { NargaStars } from "@/components/reviews/narga-stars";
 import { Button } from "@/components/ui/button";
 import { formatReviewCount, formatStars, shortAddress } from "@/lib/format";
 import type { PlaceListItem } from "@/lib/queries/places";
@@ -60,8 +61,9 @@ function PlaceSheet({ place, onClose }: { place: PlaceListItem; onClose: () => v
             <h2 className="leading-6 font-semibold text-balance">{place.name}</h2>
             <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-sm">
               {place.meanStars !== null ? (
-                <span className="text-foreground font-medium">
-                  ★ {formatStars(place.meanStars)}
+                <span className="text-foreground inline-flex items-center gap-1.5 font-medium">
+                  <NargaStars stars={place.meanStars} size="sm" />
+                  {formatStars(place.meanStars)}
                 </span>
               ) : (
                 <span>sem nota</span>

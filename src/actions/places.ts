@@ -210,7 +210,8 @@ export async function createPlace(_prev: FormState, formData: FormData): Promise
   if (slug === null) return { ok: false, error: SAVE_FAILED };
 
   revalidatePlaceLists();
-  redirect(`/lugares/${slug}`);
+  // Passo 3 do wizard é "sua nota" (docs/04): cai direto no formulário de avaliar.
+  redirect(`/lugares/${slug}/avaliar?novo=1`);
 }
 
 /**

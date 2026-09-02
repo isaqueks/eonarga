@@ -9,7 +9,8 @@ import type { PlaceListItem } from "@/lib/queries/places";
 
 export interface RankedPlace {
   place: PlaceListItem;
-  position: number;
+  /** Posição no ranking. Some quando a ordenação escolhida não é a do ranking. */
+  position?: number;
 }
 
 function normalize(value: string): string {

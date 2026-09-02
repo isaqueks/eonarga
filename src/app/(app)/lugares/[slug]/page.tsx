@@ -4,15 +4,20 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PlacesMapLazy } from "@/components/map/places-map-lazy";
+import { PeopleList } from "@/components/people-list";
 import { HasNargaBadge } from "@/components/places/has-narga-badge";
 import { MapsButtons } from "@/components/places/maps-buttons";
 import { PriceLevel } from "@/components/places/price-level";
+import { ApprovedBadge, FewRatingsBadge } from "@/components/places/rating-badges";
 import { StatusButtons } from "@/components/places/status-buttons";
+import { NargaStars } from "@/components/reviews/narga-stars";
+import { ReviewCard } from "@/components/reviews/review-card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { requireUser } from "@/lib/auth/guards";
-import { formatNames, formatReviewCount, formatStars, instagramHandle } from "@/lib/format";
+import { formatReviewCount, formatStars, instagramHandle } from "@/lib/format";
 import { getPlaceBySlug } from "@/lib/queries/places";
+import { getReviewsForPlace } from "@/lib/queries/reviews";
 
 import { PlaceActions, UnarchiveButton } from "./place-actions";
 
@@ -31,6 +36,8 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
   const place = await getPlaceBySlug(slug, user.id);
   if (!place) notFound();
 
+  const reviews = await getReviewsForPlace(place.id, { id: user.id, role: user.role });
+  const myReview = reviews.find((review) => review.author.id === user.id) ?? null;
   const isOwnerOrAdmin = place.createdBy.id === user.id || user.role === "admin";
   const instagram = instagramHandle(place.instagram);
 
@@ -84,25 +91,23 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
         </p>
       </div>
 
-      <div className="flex items-baseline gap-3">
-        {place.meanStars !== null ? (
-          <>
-            <span className="text-3xl font-semibold tabular-nums">
-              ★ {formatStars(place.meanStars)}
-            </span>
-            <span className="text-muted-foreground text-sm">
-              {formatReviewCount(place.reviewCount)}
-            </span>
-            {place.approved ? (
-              <span className="text-narga text-sm font-medium">🏅 Aprovado pelo narga</span>
-            ) : null}
-          </>
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            Ninguém deu nota. Seja o primeiro (ou o culpado).
-          </p>
-        )}
-      </div>
+      {place.meanStars !== null ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <NargaStars stars={place.meanStars} size="lg" />
+          <span className="text-3xl leading-none font-semibold tabular-nums">
+            {formatStars(place.meanStars)}
+          </span>
+          <span className="text-muted-foreground text-sm">
+            ({formatReviewCount(place.reviewCount)})
+          </span>
+          {place.approved ? <ApprovedBadge size="md" /> : null}
+          {place.reviewCount < 3 ? <FewRatingsBadge /> : null}
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          Ninguém deu nota. Seja o primeiro (ou o culpado).
+        </p>
+      )}
 
       <MapsButtons lat={place.lat} lng={place.lng} googleMapsUrl={place.googleMapsUrl} />
       <StatusButtons placeId={place.id} initial={place.myStatus} />
@@ -155,19 +160,9 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
 
       <Separator />
 
-      <div className="flex flex-col gap-1 text-sm">
-        {place.visitedUsers.length > 0 ? (
-          <p>
-            <span className="text-muted-foreground">Já foram:</span>{" "}
-            {formatNames(place.visitedUsers.map((u) => u.name))}
-          </p>
-        ) : null}
-        {place.wantUsers.length > 0 ? (
-          <p>
-            <span className="text-muted-foreground">Querem ir:</span>{" "}
-            {formatNames(place.wantUsers.map((u) => u.name))}
-          </p>
-        ) : null}
+      <div className="flex flex-col gap-1.5 text-sm">
+        <PeopleList label="Já foram:" people={place.visitedUsers} />
+        <PeopleList label="Querem ir:" people={place.wantUsers} />
         {place.visitedUsers.length === 0 && place.wantUsers.length === 0 ? (
           <p className="text-muted-foreground">Ninguém marcou nada aqui ainda.</p>
         ) : null}
@@ -175,12 +170,37 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
 
       <Separator />
 
-      {/* TODO(fase3): lista de avaliações, reações e o CTA "Dar minha nota". */}
-      <section className="flex flex-col gap-2">
-        <h2 className="text-base font-semibold">Avaliações</h2>
-        <p className="border-border text-muted-foreground rounded-lg border border-dashed p-4 text-center text-sm">
-          Dar nota, escrever e reagir vem na Fase 3.
-        </p>
+      {place.status === "archived" ? null : (
+        <Button
+          size="lg"
+          className="h-12 text-base"
+          nativeButton={false}
+          render={<Link href={`/lugares/${place.slug}/avaliar`} />}
+        >
+          {myReview ? "Editar minha nota" : "✍️ Dar minha nota"}
+        </Button>
+      )}
+
+      <section id="avaliacoes" className="flex scroll-mt-20 flex-col gap-3">
+        <h2 className="text-base font-semibold">Avaliações ({reviews.length})</h2>
+        {reviews.length === 0 ? (
+          <p className="border-border text-muted-foreground rounded-lg border border-dashed p-4 text-center text-sm">
+            Ninguém deu nota. Seja o primeiro (ou o culpado).
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {reviews.map((review) => (
+              <li key={review.id}>
+                <ReviewCard
+                  review={review}
+                  placeSlug={place.slug}
+                  viewerId={user.id}
+                  canEdit={place.status === "active"}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <p className="text-muted-foreground/70 text-xs">Cadastrado por {place.createdBy.name}.</p>

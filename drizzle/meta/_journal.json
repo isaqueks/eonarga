@@ -15,6 +15,13 @@
       "when": 1788375274128,
       "tag": "0001_perfil-genero-testosterona",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788376487979,
+      "tag": "0002_avatar",
+      "breakpoints": true
     }
   ]
 }

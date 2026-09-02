@@ -18,7 +18,9 @@ export const ROLES = ["admin", "member"] as const;
 export const HAS_NARGA = ["yes", "no", "unknown"] as const;
 export const PLACE_STATUS = ["active", "archived"] as const;
 export const USER_PLACE_STATUS = ["want", "visited"] as const;
-export const REACTION_EMOJIS = ["👍", "😂", "🔥", "🤮", "💨"] as const;
+// Import relativo de propósito: o drizzle-kit lê este arquivo sem o alias "@/".
+import { REACTION_EMOJIS } from "../constants";
+export { REACTION_EMOJIS };
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -29,6 +31,8 @@ export const users = sqliteTable("users", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
   lastLoginAt: text("last_login_at"),
+  // Id da foto de perfil no storage (src/lib/storage.ts). Null = iniciais.
+  avatarId: text("avatar_id"),
   // Campos de zoeira do perfil (docs/08 #25). Admin escreve o que quiser; membro escolhe da lista.
   gender: text("gender"),
   // ng/dL. Membro vai até 1200; admin não tem teto.

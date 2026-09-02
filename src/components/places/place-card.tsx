@@ -1,12 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { NargaStars } from "@/components/reviews/narga-stars";
 import { formatNames, formatReviewCount, formatStars, shortAddress } from "@/lib/format";
 import type { PlaceListItem } from "@/lib/queries/places";
 import { cn } from "@/lib/utils";
 
 import { HasNargaBadge } from "./has-narga-badge";
 import { PriceLevel } from "./price-level";
+import { ApprovedBadge, FewRatingsBadge } from "./rating-badges";
 
 export function PlaceCard({
   place,
@@ -50,8 +52,9 @@ export function PlaceCard({
 
         <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           {place.meanStars !== null ? (
-            <span className="text-foreground font-medium">
-              ★ {formatStars(place.meanStars)}{" "}
+            <span className="text-foreground inline-flex items-center gap-1.5 font-medium">
+              <NargaStars stars={place.meanStars} size="sm" />
+              {formatStars(place.meanStars)}
               <span className="text-muted-foreground font-normal">
                 · {formatReviewCount(place.reviewCount)}
               </span>
@@ -59,22 +62,24 @@ export function PlaceCard({
           ) : (
             <span>sem nota</span>
           )}
-          {place.reviewCount > 0 && place.reviewCount < 3 ? (
-            <span className="border-border rounded-full border px-1.5 py-px text-[0.65rem]">
-              poucas notas
-            </span>
-          ) : null}
+          {place.reviewCount > 0 && place.reviewCount < 3 ? <FewRatingsBadge /> : null}
           <PriceLevel value={place.priceLevel} />
           {place.hasNarga === "yes" ? <HasNargaBadge value="yes" /> : null}
         </div>
 
-        {place.approved ? (
-          <p className="text-narga text-xs font-medium">🏅 Aprovado pelo narga</p>
-        ) : null}
+        {place.approved ? <ApprovedBadge className="self-start" /> : null}
 
         {address ? <p className="text-muted-foreground truncate text-xs">{address}</p> : null}
 
-        {/* TODO(fase3): o veredito da avaliação mais recente entra aqui como citação. */}
+        {place.latestVerdict ? (
+          <blockquote className="border-narga/60 text-muted-foreground border-l-2 pl-2 text-xs">
+            <span className="italic">“{place.latestVerdict}”</span>
+            {place.latestVerdictAuthor ? (
+              <span className="text-muted-foreground/70"> — {place.latestVerdictAuthor}</span>
+            ) : null}
+          </blockquote>
+        ) : null}
+
         {people}
       </div>
     </Link>

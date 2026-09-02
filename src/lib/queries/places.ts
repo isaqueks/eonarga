@@ -7,6 +7,7 @@ import { isApprovedByNarga } from "@/lib/ranking";
 export interface PersonRef {
   id: string;
   name: string;
+  avatarId: string | null;
 }
 
 export interface PlaceCategoryRef {
@@ -38,6 +39,10 @@ export interface PlaceListItem {
   visitedUsers: PersonRef[];
   myStatus: "want" | "visited" | null;
   lastReviewAt: string | null;
+  /** Veredito da avaliação editada mais recentemente (a citação do card). */
+  latestVerdict: string | null;
+  /** Quem escreveu esse veredito. */
+  latestVerdictAuthor: string | null;
 }
 
 export interface PlaceDetail extends PlaceListItem {
@@ -65,6 +70,33 @@ const reviewAgg = db
   .groupBy(reviews.placeId)
   .as("review_agg");
 
+/**
+ * Avaliação mais recente de cada lugar, numerada por `updated_at` desc (empate
+ * desempatado pelo id, pra ser determinístico). Uma janela em vez de N queries.
+ */
+const latestReviewRanked = db
+  .select({
+    placeId: reviews.placeId,
+    verdict: reviews.verdict,
+    authorName: users.name,
+    rn: sql<number>`row_number() over (partition by ${reviews.placeId} order by ${reviews.updatedAt} desc, ${reviews.id} desc)`.as(
+      "rn",
+    ),
+  })
+  .from(reviews)
+  .innerJoin(users, eq(users.id, reviews.userId))
+  .as("latest_review_ranked");
+
+const latestReview = db
+  .select({
+    placeId: latestReviewRanked.placeId,
+    verdict: latestReviewRanked.verdict,
+    authorName: latestReviewRanked.authorName,
+  })
+  .from(latestReviewRanked)
+  .where(eq(latestReviewRanked.rn, 1))
+  .as("latest_review");
+
 const placeColumns = {
   id: places.id,
   slug: places.slug,
@@ -83,6 +115,8 @@ const placeColumns = {
   reviewCount: reviewAgg.reviewCount,
   sumStars: reviewAgg.sumStars,
   lastReviewAt: reviewAgg.lastReviewAt,
+  latestVerdict: latestReview.verdict,
+  latestVerdictAuthor: latestReview.authorName,
 };
 
 type PlaceRow = {
@@ -103,6 +137,8 @@ type PlaceRow = {
   reviewCount: number | null;
   sumStars: number | null;
   lastReviewAt: string | null;
+  latestVerdict: string | null;
+  latestVerdictAuthor: string | null;
 };
 
 /** Quem marcou "quero ir" / "já fui", com o nome da pessoa. Uma query pra todos os lugares. */
@@ -114,6 +150,7 @@ async function loadStatuses(placeIds: string[]) {
       status: userPlaceStatus.status,
       userId: users.id,
       userName: users.name,
+      userAvatarId: users.avatarId,
     })
     .from(userPlaceStatus)
     .innerJoin(users, eq(users.id, userPlaceStatus.userId))
@@ -132,7 +169,7 @@ function buildItem(row: PlaceRow, statuses: StatusRow[], userId: string): PlaceL
   let myStatus: "want" | "visited" | null = null;
 
   for (const s of statuses) {
-    const person = { id: s.userId, name: s.userName };
+    const person: PersonRef = { id: s.userId, name: s.userName, avatarId: s.userAvatarId };
     if (s.status === "want") wantUsers.push(person);
     else visitedUsers.push(person);
     if (s.userId === userId) myStatus = s.status;
@@ -162,6 +199,8 @@ function buildItem(row: PlaceRow, statuses: StatusRow[], userId: string): PlaceL
     visitedUsers,
     myStatus,
     lastReviewAt: row.lastReviewAt,
+    latestVerdict: row.latestVerdict,
+    latestVerdictAuthor: row.latestVerdictAuthor,
   };
 }
 
@@ -186,6 +225,7 @@ export async function listPlaces(opts: ListPlacesOptions): Promise<PlaceListItem
     .from(places)
     .innerJoin(categories, eq(categories.id, places.categoryId))
     .leftJoin(reviewAgg, eq(reviewAgg.placeId, places.id))
+    .leftJoin(latestReview, eq(latestReview.placeId, places.id))
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(asc(categories.sortOrder), asc(places.name))) as PlaceRow[];
 
@@ -215,11 +255,13 @@ export async function getPlaceBySlug(slug: string, userId: string): Promise<Plac
       updatedAt: places.updatedAt,
       creatorId: users.id,
       creatorName: users.name,
+      creatorAvatarId: users.avatarId,
     })
     .from(places)
     .innerJoin(categories, eq(categories.id, places.categoryId))
     .innerJoin(users, eq(users.id, places.createdBy))
     .leftJoin(reviewAgg, eq(reviewAgg.placeId, places.id))
+    .leftJoin(latestReview, eq(latestReview.placeId, places.id))
     .where(eq(places.slug, slug))
     .limit(1);
 
@@ -236,7 +278,7 @@ export async function getPlaceBySlug(slug: string, userId: string): Promise<Plac
     website: row.website,
     googleMapsUrl: row.googleMapsUrl,
     googlePlaceId: row.googlePlaceId,
-    createdBy: { id: row.creatorId, name: row.creatorName },
+    createdBy: { id: row.creatorId, name: row.creatorName, avatarId: row.creatorAvatarId },
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -271,6 +313,7 @@ export async function listPlacesCreatedBy(userId: string): Promise<PlaceListItem
     .from(places)
     .innerJoin(categories, eq(categories.id, places.categoryId))
     .leftJoin(reviewAgg, eq(reviewAgg.placeId, places.id))
+    .leftJoin(latestReview, eq(latestReview.placeId, places.id))
     .where(eq(places.createdBy, userId))
     .orderBy(desc(places.createdAt))) as PlaceRow[];
 

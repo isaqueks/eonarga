@@ -4,6 +4,7 @@ import {
   bayesianScore,
   globalMean,
   isApprovedByNarga,
+  parseRankingSort,
   rank,
   ratingToStars,
   starsToRating,
@@ -69,5 +70,21 @@ describe("rank", () => {
   it("média global cai pra 3 sem dados", () => {
     expect(globalMean(0, 0)).toBe(3);
     expect(globalMean(9, 2)).toBe(4.5);
+  });
+});
+
+describe("parseRankingSort", () => {
+  it("aceita as quatro ordenações", () => {
+    expect(parseRankingSort("melhores")).toBe("melhores");
+    expect(parseRankingSort("mais-avaliados")).toBe("mais-avaliados");
+    expect(parseRankingSort("recentes")).toBe("recentes");
+    expect(parseRankingSort("piores")).toBe("piores");
+  });
+
+  it("cai em melhores com lixo na query string", () => {
+    expect(parseRankingSort(undefined)).toBe("melhores");
+    expect(parseRankingSort(["piores"])).toBe("melhores");
+    expect(parseRankingSort("MELHORES")).toBe("melhores");
+    expect(parseRankingSort("sei-la")).toBe("melhores");
   });
 });

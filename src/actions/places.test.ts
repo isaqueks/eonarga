@@ -141,8 +141,8 @@ async function placeBySlug(slug: string) {
 }
 
 describe("createPlace", () => {
-  it("salva o lugar, normaliza os campos e manda pra ficha", async () => {
-    expect(await createBasePlace()).toBe("/lugares/sebo-do-joao");
+  it("salva o lugar, normaliza os campos e manda pro passo da nota", async () => {
+    expect(await createBasePlace()).toBe("/lugares/sebo-do-joao/avaliar?novo=1");
 
     const place = await placeBySlug("sebo-do-joao");
     expect(place).toMatchObject({
@@ -168,9 +168,9 @@ describe("createPlace", () => {
   });
 
   it("dá sufixo no slug quando o nome se repete", async () => {
-    expect(await createBasePlace()).toBe("/lugares/sebo-do-joao");
-    expect(await createBasePlace()).toBe("/lugares/sebo-do-joao-2");
-    expect(await createBasePlace()).toBe("/lugares/sebo-do-joao-3");
+    expect(await createBasePlace()).toBe("/lugares/sebo-do-joao/avaliar?novo=1");
+    expect(await createBasePlace()).toBe("/lugares/sebo-do-joao-2/avaliar?novo=1");
+    expect(await createBasePlace()).toBe("/lugares/sebo-do-joao-3/avaliar?novo=1");
   });
 
   it("recusa categoria que não existe", async () => {
@@ -213,7 +213,7 @@ describe("createPlace", () => {
       googleMapsUrl: "",
       name: "Lugar Pelado",
     });
-    expect(ok).toBe("/lugares/lugar-pelado");
+    expect(ok).toBe("/lugares/lugar-pelado/avaliar?novo=1");
     const place = await placeBySlug("lugar-pelado");
     expect(place.address).toBeNull();
     expect(place.priceLevel).toBeNull();

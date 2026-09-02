@@ -1,3 +1,4 @@
+import { Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -19,6 +20,15 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             className="size-8 rounded-full object-cover"
           />
           <span className="font-display text-base">E o narga?</span>
+        </Link>
+
+        <Link
+          href="/galera"
+          aria-label="Galera"
+          title="Galera"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 ml-auto flex size-11 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-3"
+        >
+          <Users className="size-5" aria-hidden />
         </Link>
       </header>
 
