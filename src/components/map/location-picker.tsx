@@ -26,6 +26,8 @@ export interface LocationPickerProps {
   /** Emoji dentro do pino (a categoria escolhida, quando já tem uma). */
   emoji?: string;
   color?: string;
+  /** Sem posição ainda: pede a localização do navegador e já põe o pino nela. */
+  autoLocate?: boolean;
 }
 
 /** Mapa com um pino arrastável. Clicar no mapa reposiciona; soltar o pino também. */
@@ -37,6 +39,7 @@ export function LocationPicker({
   className,
   emoji = "📍",
   color = "#f4b942",
+  autoLocate = false,
 }: LocationPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -128,6 +131,14 @@ export function LocationPicker({
     onLocated: (lat, lng) => onChangeRef.current({ lat, lng }),
   });
 
+  // "Estou aqui agora": ao abrir sem posição, pede o GPS uma vez e cai com o pino no lugar.
+  const autoLocatedRef = useRef(false);
+  useEffect(() => {
+    if (!autoLocate || !ready || value || autoLocatedRef.current) return;
+    autoLocatedRef.current = true;
+    locate();
+  }, [autoLocate, ready, value, locate]);
+
   return (
     <div className={cn("relative isolate", className)}>
       <div
@@ -136,7 +147,12 @@ export function LocationPicker({
         aria-label="Escolher a posição no mapa"
         className="narga-map h-full w-full"
       />
-      <LocateButton onClick={locate} loading={locating} error={error} className="bottom-8" />
+      <LocateButton
+        onClick={() => locate()}
+        loading={locating}
+        error={error}
+        className="bottom-8"
+      />
     </div>
   );
 }

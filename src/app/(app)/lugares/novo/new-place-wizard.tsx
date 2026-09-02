@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ClipboardPaste, Loader2, MapPin, Search } from "lucide-react";
+import { ArrowLeft, ClipboardPaste, Loader2, LocateFixed, MapPin, Search } from "lucide-react";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { createPlace } from "@/actions/places";
@@ -252,6 +252,8 @@ function StepWhere({
   onContinue: () => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  // "Estou aqui agora" abre o mapa já pedindo o GPS; "Abrir o mapa" cai no Centro.
+  const [autoLocate, setAutoLocate] = useState(false);
 
   // Ao mover o pino, o endereço vem do reverse geocoding (docs/01).
   const fillAddressFromPosition = useCallback(
@@ -292,10 +294,28 @@ function StepWhere({
       <section className="border-border flex flex-col gap-2 rounded-xl border p-3">
         <h2 className="text-sm font-medium">Marcar no mapa</h2>
         {showPicker || position ? null : (
-          <Button variant="outline" size="lg" className="h-11" onClick={() => setShowPicker(true)}>
-            <MapPin className="size-4" aria-hidden />
-            Abrir o mapa
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              size="lg"
+              className="h-11 flex-1"
+              onClick={() => {
+                setAutoLocate(true);
+                setShowPicker(true);
+              }}
+            >
+              <LocateFixed className="size-4" aria-hidden />
+              Estou aqui agora
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className="h-11 flex-1"
+              onClick={() => setShowPicker(true)}
+            >
+              <MapPin className="size-4" aria-hidden />
+              Abrir o mapa
+            </Button>
+          </div>
         )}
         {showPicker || position ? (
           <>
@@ -303,10 +323,12 @@ function StepWhere({
               value={position}
               onChange={handlePickerChange}
               center={center}
+              autoLocate={autoLocate}
               className="border-border h-56 overflow-hidden rounded-lg border"
             />
             <p className="text-muted-foreground text-xs">
-              Toque no mapa ou arraste o pino. O endereço se preenche sozinho.
+              Toque no mapa ou arraste o pino. O endereço se preenche sozinho. O botão de alvo pede
+              sua localização.
             </p>
           </>
         ) : null}

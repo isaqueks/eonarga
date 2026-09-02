@@ -23,17 +23,19 @@ erDiagram
 
 ### users
 
-| coluna                 | tipo        | notas                                   |
-| ---------------------- | ----------- | --------------------------------------- |
-| id                     | text pk     |                                         |
-| name                   | text        | exibido em todo lugar                   |
-| email                  | text unique | lower-case; é o login                   |
-| password_hash          | text        | argon2id                                |
-| role                   | text        | `admin` \| `member`                     |
-| is_active              | int (bool)  | desativado não loga; conteúdo permanece |
-| must_change_password   | int (bool)  | true ao criar / resetar senha           |
-| created_at, updated_at | text        |                                         |
-| last_login_at          | text null   |                                         |
+| coluna                 | tipo        | notas                                                                                                         |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| id                     | text pk     |                                                                                                               |
+| name                   | text        | exibido em todo lugar                                                                                         |
+| email                  | text unique | lower-case; é o login                                                                                         |
+| password_hash          | text        | argon2id                                                                                                      |
+| role                   | text        | `admin` \| `member`                                                                                           |
+| is_active              | int (bool)  | desativado não loga; conteúdo permanece                                                                       |
+| must_change_password   | int (bool)  | true ao criar / resetar senha                                                                                 |
+| created_at, updated_at | text        |                                                                                                               |
+| last_login_at          | text null   |                                                                                                               |
+| gender                 | text null   | "Gênero". Admin: texto livre (≤ 40). Membro: só `homossexual` ou `transsexual`. Zoeira do grupo (docs/08 #25) |
+| testosterone           | int null    | ng/dL. Membro: 0 a 1200. Admin: sem teto                                                                      |
 
 ### sessions
 

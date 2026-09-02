@@ -28,6 +28,8 @@ export interface PlacesMapProps {
   cluster?: boolean;
   /** Botão "onde estou". */
   showLocate?: boolean;
+  /** Pede a localização do navegador ao abrir e mostra o pontinho, sem mover o mapa. */
+  autoLocate?: boolean;
   /** Mini-mapa da ficha: sem arrastar, sem zoom. */
   interactive?: boolean;
 }
@@ -53,6 +55,7 @@ export function PlacesMap({
   fitToPlaces = false,
   cluster = true,
   showLocate = true,
+  autoLocate = false,
   interactive = true,
 }: PlacesMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -166,6 +169,14 @@ export function PlacesMap({
 
   const { locate, locating, error } = useLocateMe(mapRef);
 
+  // Ao abrir a tela, mostra onde a pessoa está. Só move o mapa se não houver pinos pra ver.
+  const autoLocatedRef = useRef(false);
+  useEffect(() => {
+    if (!autoLocate || !ready || autoLocatedRef.current) return;
+    autoLocatedRef.current = true;
+    locate({ pan: places.length === 0 });
+  }, [autoLocate, ready, locate, places.length]);
+
   return (
     <div className={cn("relative isolate", className)}>
       <div
@@ -174,7 +185,9 @@ export function PlacesMap({
         aria-label="Mapa dos lugares"
         className="narga-map h-full w-full"
       />
-      {showLocate ? <LocateButton onClick={locate} loading={locating} error={error} /> : null}
+      {showLocate ? (
+        <LocateButton onClick={() => locate()} loading={locating} error={error} />
+      ) : null}
     </div>
   );
 }

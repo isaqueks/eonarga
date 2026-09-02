@@ -142,7 +142,7 @@ Erro genérico "Email ou senha errados" (não revela qual). Sem "esqueci a senha
 1. **Onde?**
    - Campo grande "Cole o link do Google Maps" com botão "Colar" (usa a API de clipboard).
    - Ou "Buscar por nome" (autocomplete via Photon, viés pra Floripa).
-   - Ou "Marcar no mapa" (mapa com pino arrastável no centro; ao soltar, reverse geocoding preenche o endereço).
+   - Ou "Estou aqui agora" (pede o GPS e já põe o pino na sua posição) / "Abrir o mapa" (pino arrastável no Centro); ao soltar, reverse geocoding preenche o endereço.
    - Ao resolver, mostra mini-mapa com o pino, nome sugerido e endereço. Dá pra corrigir o pino aqui.
 2. **O quê?** Nome (pré-preenchido), categoria (grid de chips com emoji), "Tem narga?" (3 botões), preço ($ $$ $$$ $$$$), descrição, dicas, Instagram.
 3. **Sua nota (opcional).** Mesmo formulário de avaliar. "Pular" salva só o lugar.
@@ -185,7 +185,7 @@ Progresso visível ("1 de 3"). Voltar preserva o que foi digitado. Se o link nã
 
 ### Perfil
 
-- Nome (editável), email, botão "Trocar senha", toggle de tema, "Sair".
+- Nome (editável), email, gênero e testosterona (regras por papel no [08](./08-decisoes-em-aberto.md) #25), botão "Trocar senha", toggle de tema, "Sair".
 - Minhas avaliações e lugares que criei.
 - Se admin: link "Administração".
 

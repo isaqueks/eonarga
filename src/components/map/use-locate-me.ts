@@ -44,44 +44,50 @@ export function useLocateMe(mapRef: React.RefObject<L.Map | null>, options: Loca
     timerRef.current = setTimeout(() => setError(null), 3500);
   }, []);
 
-  const locate = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      fail(NO_GPS);
-      return;
-    }
+  /** `pan: false` só mostra o pontinho, sem mover o mapa (usado ao abrir a tela). */
+  const locate = useCallback(
+    (opts: { pan?: boolean } = {}) => {
+      const map = mapRef.current;
+      if (!map) return;
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        fail(NO_GPS);
+        return;
+      }
 
-    setError(null);
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const current = mapRef.current;
-        if (!current) return;
-        const { latitude, longitude } = position.coords;
-        const { showDot = true, onLocated } = optionsRef.current;
+      setError(null);
+      setLocating(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const current = mapRef.current;
+          if (!current) return;
+          const { latitude, longitude } = position.coords;
+          const { showDot = true, onLocated } = optionsRef.current;
 
-        if (showDot) {
-          if (markerRef.current) {
-            markerRef.current.setLatLng([latitude, longitude]);
-          } else {
-            markerRef.current = L.marker([latitude, longitude], {
-              icon: createHereIcon(),
-              interactive: false,
-              keyboard: false,
-              zIndexOffset: -100,
-            }).addTo(current);
+          if (showDot) {
+            if (markerRef.current) {
+              markerRef.current.setLatLng([latitude, longitude]);
+            } else {
+              markerRef.current = L.marker([latitude, longitude], {
+                icon: createHereIcon(),
+                interactive: false,
+                keyboard: false,
+                zIndexOffset: -100,
+              }).addTo(current);
+            }
           }
-        }
 
-        current.setView([latitude, longitude], Math.max(current.getZoom(), 17));
-        setLocating(false);
-        onLocated?.(latitude, longitude);
-      },
-      () => fail(NO_GPS),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30_000 },
-    );
-  }, [mapRef, fail]);
+          if (opts.pan !== false) {
+            current.setView([latitude, longitude], Math.max(current.getZoom(), 17));
+          }
+          setLocating(false);
+          onLocated?.(latitude, longitude);
+        },
+        () => fail(NO_GPS),
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 30_000 },
+      );
+    },
+    [mapRef, fail],
+  );
 
   return { locate, locating, error };
 }

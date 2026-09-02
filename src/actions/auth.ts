@@ -23,6 +23,7 @@ import {
 } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
+import { profileSchemaFor } from "@/lib/profile";
 import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { field, fieldErrorsFrom, type FormState } from "@/actions/form-state";
 
@@ -164,21 +165,27 @@ export async function changePassword(
   redirect("/");
 }
 
-const profileSchema = z.object({
-  name: z.string().trim().min(2, "Nome curto demais").max(60, "Nome comprido demais (máximo 60)"),
-});
-
 export async function updateProfile(_prevState: FormState, formData: FormData): Promise<FormState> {
   const { user } = await assertUser();
 
-  const parsed = profileSchema.safeParse({ name: field(formData, "name") });
+  // As regras de gênero e testosterona dependem do papel (docs/08 #25).
+  const parsed = profileSchemaFor(user.role).safeParse({
+    name: field(formData, "name"),
+    gender: field(formData, "gender"),
+    testosterone: field(formData, "testosterone"),
+  });
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) };
   }
 
   await db
     .update(users)
-    .set({ name: parsed.data.name, updatedAt: new Date().toISOString() })
+    .set({
+      name: parsed.data.name,
+      gender: parsed.data.gender,
+      testosterone: parsed.data.testosterone,
+      updatedAt: new Date().toISOString(),
+    })
     .where(eq(users.id, user.id));
 
   revalidatePath("/perfil");

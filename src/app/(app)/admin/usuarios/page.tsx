@@ -40,6 +40,8 @@ export default async function AdminUsuariosPage() {
       isActive: users.isActive,
       mustChangePassword: users.mustChangePassword,
       lastLoginAt: users.lastLoginAt,
+      gender: users.gender,
+      testosterone: users.testosterone,
       reviewCount: sql<number>`(
         select count(*) from ${reviews} where ${reviews.userId} = ${users.id}
       )`.as("review_count"),
@@ -66,6 +68,8 @@ export default async function AdminUsuariosPage() {
               <TableHead>Email</TableHead>
               <TableHead>Papel</TableHead>
               <TableHead>Ativo</TableHead>
+              <TableHead>Gênero</TableHead>
+              <TableHead className="text-right">Testo</TableHead>
               <TableHead>Último login</TableHead>
               <TableHead className="text-right">Avaliações</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -95,6 +99,12 @@ export default async function AdminUsuariosPage() {
                   <Badge variant={row.isActive ? "outline" : "destructive"}>
                     {row.isActive ? "sim" : "não"}
                   </Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground whitespace-nowrap">
+                  {row.gender ?? "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-right tabular-nums">
+                  {row.testosterone ?? "—"}
                 </TableCell>
                 <TableCell className="text-muted-foreground whitespace-nowrap">
                   {ultimoLogin(row.lastLoginAt)}

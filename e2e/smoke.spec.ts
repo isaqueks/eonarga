@@ -166,8 +166,10 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await page.goto("/mapa");
   const map = page.getByLabel("Mapa dos lugares");
   await expect(map).toHaveClass(/leaflet-container/);
-  await expect(map.locator(".leaflet-marker-icon")).toHaveCount(1);
-  await map.locator(".leaflet-marker-icon").first().click();
+  // Um pino de lugar; o pontinho "estou aqui" (geolocalização do contexto de teste) é outro marcador.
+  await expect(map.locator(".narga-pin")).toHaveCount(1);
+  await expect(map.locator(".narga-here")).toHaveCount(1);
+  await map.locator(".narga-pin").first().click();
   await expect(page.locator("a", { hasText: /Ver ficha/i })).toBeVisible();
   await shot(page, "12-mapa");
 
@@ -201,6 +203,14 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(
     page.locator(`input[value="${E2E_ADMIN.email}"], :text("${E2E_ADMIN.email}")`).first(),
   ).toBeVisible();
+  // Admin: gênero em texto livre e testosterona sem teto.
+  await page.locator("#gender").fill("Alfa de Floripa");
+  await page.locator("#testosterone").fill("5000");
+  await page.getByRole("button", { name: "Salvar", exact: true }).click();
+  await expect(page.getByText("Salvo.")).toBeVisible({ timeout: 30_000 });
+  await page.reload();
+  await expect(page.locator("#gender")).toHaveValue("Alfa de Floripa");
+  await expect(page.locator("#testosterone")).toHaveValue("5000");
   await shot(page, "15-perfil");
   await page.getByRole("button", { name: "Sair" }).click();
   await page.waitForURL(/\/login/);

@@ -29,6 +29,10 @@ export const users = sqliteTable("users", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
   lastLoginAt: text("last_login_at"),
+  // Campos de zoeira do perfil (docs/08 #25). Admin escreve o que quiser; membro escolhe da lista.
+  gender: text("gender"),
+  // ng/dL. Membro vai até 1200; admin não tem teto.
+  testosterone: integer("testosterone"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

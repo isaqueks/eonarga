@@ -18,7 +18,13 @@ export default async function PerfilPage() {
     <div className="flex flex-col gap-6 p-4">
       <section className="flex flex-col gap-4">
         <h1 className="font-display text-xl">Perfil</h1>
-        <ProfileForm name={user.name} email={user.email} />
+        <ProfileForm
+          name={user.name}
+          email={user.email}
+          role={user.role}
+          gender={user.gender}
+          testosterone={user.testosterone}
+        />
       </section>
 
       <Separator />

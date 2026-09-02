@@ -30,6 +30,7 @@ export function MapView({
         zoom={zoom}
         selectedId={selected?.id ?? null}
         onSelect={setSelected}
+        autoLocate
         className="border-border h-full w-full overflow-hidden rounded-xl border"
       />
       {selected ? <PlaceSheet place={selected} onClose={() => setSelected(null)} /> : null}
