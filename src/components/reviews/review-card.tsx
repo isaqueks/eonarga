@@ -61,7 +61,7 @@ export function ReviewCard({
         </div>
         <ReviewMenu
           reviewId={review.id}
-          editHref={`/lugares/${placeSlug}/avaliar`}
+          editHref={`/lugares/${placeSlug}/avaliar?review=${review.id}`}
           canEdit={review.canEdit && canEdit}
           canDelete={review.canDelete}
           ownReview={review.author.id === viewerId}

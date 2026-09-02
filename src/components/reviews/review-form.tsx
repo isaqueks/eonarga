@@ -21,13 +21,17 @@ interface Draft {
   visitedAt: string;
 }
 
-function draftKey(placeId: string): string {
-  return `eonarga:avaliacao:${placeId}`;
+/**
+ * Uma chave por avaliação: o rascunho de "fui de novo" (`nova`) não pode atropelar o
+ * de uma edição, nem o contrário.
+ */
+function draftKey(placeId: string, reviewId?: string): string {
+  return `eonarga:avaliacao:${placeId}:${reviewId ?? "nova"}`;
 }
 
-function readDraft(placeId: string): Draft | null {
+function readDraft(key: string): Draft | null {
   try {
-    const raw = window.localStorage.getItem(draftKey(placeId));
+    const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
@@ -43,19 +47,19 @@ function readDraft(placeId: string): Draft | null {
   }
 }
 
-function writeDraft(placeId: string, draft: Draft) {
+function writeDraft(key: string, draft: Draft) {
   try {
-    window.localStorage.setItem(draftKey(placeId), JSON.stringify(draft));
+    window.localStorage.setItem(key, JSON.stringify(draft));
   } catch {
     // Storage bloqueado (aba anônima): sem rascunho, o formulário continua funcionando.
   }
 }
 
-function clearDraft(placeId: string) {
-  cacheKey = placeId;
+function clearDraft(key: string) {
+  cacheKey = key;
   cacheValue = null;
   try {
-    window.localStorage.removeItem(draftKey(placeId));
+    window.localStorage.removeItem(key);
   } catch {
     // idem
   }
@@ -70,10 +74,10 @@ function clearDraft(placeId: string) {
 let cacheKey: string | null = null;
 let cacheValue: Draft | null = null;
 
-function draftSnapshot(placeId: string): Draft | null {
-  if (cacheKey !== placeId) {
-    cacheKey = placeId;
-    cacheValue = readDraft(placeId);
+function draftSnapshot(key: string): Draft | null {
+  if (cacheKey !== key) {
+    cacheKey = key;
+    cacheValue = readDraft(key);
   }
   return cacheValue;
 }
@@ -112,6 +116,7 @@ export function ReviewForm({
   placeId,
   today,
   initial,
+  reviewId,
   className,
 }: {
   placeId: string;
@@ -119,9 +124,12 @@ export function ReviewForm({
   today: string;
   /** Preenchido = modo edição. */
   initial?: ReviewFormInitial;
+  /** Id da avaliação sendo editada. Sem ele a action cria uma nota nova (outra visita). */
+  reviewId?: string;
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(upsertReview, EMPTY_FORM_STATE);
+  const storageKey = draftKey(placeId, reviewId);
 
   // Congelado no primeiro render: é a base pra saber se o rascunho guardado difere.
   const [initialValues] = useState<Draft>(() => ({
@@ -139,7 +147,7 @@ export function ReviewForm({
   // então o HTML bate na hidratação.
   const stored = useSyncExternalStore(
     subscribeDraft,
-    useCallback(() => draftSnapshot(placeId), [placeId]),
+    useCallback(() => draftSnapshot(storageKey), [storageKey]),
     getServerDraftSnapshot,
   );
   const draft = !dismissed && stored && !sameDraft(stored, initialValues) ? stored : null;
@@ -148,13 +156,13 @@ export function ReviewForm({
   function patch(changes: Partial<Draft>) {
     const next = { ...values, ...changes };
     setValues(next);
-    writeDraft(placeId, next);
+    writeDraft(storageKey, next);
   }
 
   // Se o servidor recusou, o rascunho volta — o submit tinha acabado de limpar.
   useEffect(() => {
-    if (state.error || state.fieldErrors) writeDraft(placeId, values);
-  }, [state, placeId, values]);
+    if (state.error || state.fieldErrors) writeDraft(storageKey, values);
+  }, [state, storageKey, values]);
 
   const fieldError = (field: string) => state.fieldErrors?.[field];
   const verdictLeft = VERDICT_MAX - values.verdict.length;
@@ -162,11 +170,12 @@ export function ReviewForm({
   return (
     <form
       action={formAction}
-      onSubmit={() => clearDraft(placeId)}
+      onSubmit={() => clearDraft(storageKey)}
       className={cn("flex flex-col gap-6", className)}
       noValidate
     >
       <input type="hidden" name="placeId" value={placeId} />
+      {reviewId ? <input type="hidden" name="reviewId" value={reviewId} /> : null}
 
       {draft ? (
         <div className="border-narga/40 bg-narga/10 flex flex-col gap-2 rounded-lg border p-3">
@@ -193,7 +202,7 @@ export function ReviewForm({
               size="lg"
               className="h-11 flex-1"
               onClick={() => {
-                clearDraft(placeId);
+                clearDraft(storageKey);
                 setDismissed(true);
               }}
             >

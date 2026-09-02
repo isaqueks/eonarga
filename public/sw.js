@@ -77,6 +77,64 @@ async function precache() {
   );
 }
 
+// -------------------------------------------------------------------- notificações
+
+/**
+ * Push do servidor (src/lib/push.ts). O payload é o JSON de `PushPayload`, mas
+ * um push sem corpo (teste do DevTools, ping do próprio serviço) é permitido pela
+ * spec e não pode ficar sem notificação: `userVisibleOnly` exige mostrar alguma coisa.
+ */
+self.addEventListener("push", (event) => {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json() || {};
+    } catch {
+      data = { body: event.data.text() };
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || "E o narga?", {
+      body: data.body || "Tem novidade no app.",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      // Mesma tag = um balão só por assunto; renotify faz o celular apitar mesmo assim.
+      tag: data.tag || "eonarga",
+      renotify: true,
+      data: { url: data.url || "/" },
+    }),
+  );
+});
+
+/** Tocar na notificação leva pro lugar certo, reaproveitando a janela já aberta. */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const raw = (event.notification.data && event.notification.data.url) || "/";
+  const target = new URL(raw, self.location.origin);
+
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+
+      for (const client of windows) {
+        if (new URL(client.url).origin !== target.origin) continue;
+        // `navigate` não existe em todo navegador; sem ele, só foca onde estiver.
+        if (typeof client.navigate === "function") {
+          const navigated = await client.navigate(target.href).catch(() => null);
+          await (navigated || client).focus();
+        } else {
+          await client.focus();
+        }
+        return;
+      }
+
+      await self.clients.openWindow(target.href);
+    })(),
+  );
+});
+
 // ------------------------------------------------------------------------- roteador
 
 self.addEventListener("fetch", (event) => {

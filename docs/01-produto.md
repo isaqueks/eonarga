@@ -39,7 +39,7 @@ Não existe visitante anônimo: tudo exige login.
 
 ### Avaliações
 
-- **Uma avaliação por pessoa por lugar**, sempre editável (a nota é "a sua opinião atual", não um histórico de visitas).
+- **Uma avaliação por visita**: dá pra avaliar o mesmo lugar várias vezes; cada uma é editável (nota, veredito, texto e data da visita são independentes).
 - Nota de 1 a 5 nargas, com meio ponto.
 - **Veredito em uma frase** (obrigatório, curto). Vira a citação que aparece no card do ranking.
 - Texto livre em editor visual (negrito, itálico, títulos, listas, citação, link). Atalhos de markdown funcionam (`**negrito**`, `- lista`, `# título`) e colar markdown também.

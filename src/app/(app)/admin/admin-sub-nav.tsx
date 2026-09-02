@@ -9,6 +9,7 @@ const TABS = [
   { href: "/admin/usuarios", label: "Usuários" },
   { href: "/admin/categorias", label: "Categorias" },
   { href: "/admin/importar", label: "Importar" },
+  { href: "/admin/notificar", label: "Notificar" },
 ] as const;
 
 export function AdminSubNav() {

@@ -137,5 +137,12 @@ function EventText({ event }: { event: FeedEvent }) {
           {event.reviewAuthor} em <PlaceLink place={event.place} />
         </>
       );
+
+    case "call":
+      return (
+        <>
+          <Who name={event.user.name} /> chamou a galera pro <PlaceLink place={event.place} />
+        </>
+      );
   }
 }

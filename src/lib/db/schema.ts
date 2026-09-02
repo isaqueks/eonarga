@@ -1,13 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import {
-  index,
-  integer,
-  primaryKey,
-  real,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // Datas em ISO 8601 UTC, geradas pelo SQLite. updated_at é responsabilidade do app nos UPDATEs.
 const nowIso = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
@@ -118,7 +110,8 @@ export const reviews = sqliteTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("reviews_place_user_uq").on(t.placeId, t.userId),
+    // Sem unicidade de propósito (docs/08 #29): cada visita pode virar uma avaliação.
+    index("reviews_place_user_idx").on(t.placeId, t.userId),
     index("reviews_user_idx").on(t.userId),
   ],
 );
@@ -212,6 +205,47 @@ export const photos = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("photos_place_idx").on(t.placeId)],
+);
+
+// Web Push (docs/08 #29). Uma linha por aparelho/navegador que aceitou notificações.
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: createdAt(),
+    lastSeenAt: text("last_seen_at"),
+  },
+  (t) => [index("push_subscriptions_user_idx").on(t.userId)],
+);
+
+export const NOTIFICATION_KINDS = ["call", "admin"] as const;
+
+// Histórico do que foi disparado: "Chamar galera pra cá" e avisos do admin.
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind", { enum: NOTIFICATION_KINDS }).notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    url: text("url"),
+    placeId: text("place_id").references(() => places.id, { onDelete: "set null" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    // null = todo mundo
+    targetUserId: text("target_user_id").references(() => users.id, { onDelete: "cascade" }),
+    sentCount: integer("sent_count").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("notifications_created_idx").on(t.createdAt)],
 );
 
 export const usersRelations = relations(users, ({ many }) => ({

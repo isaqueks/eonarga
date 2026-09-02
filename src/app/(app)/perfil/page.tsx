@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { logout } from "@/actions/auth";
+import { PushToggle } from "@/components/pwa/push-toggle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { requireUser } from "@/lib/auth/guards";
@@ -58,6 +59,7 @@ export default async function PerfilPage() {
           </Link>
         ) : null}
         <ThemeToggle />
+        <PushToggle />
       </section>
 
       <Separator />

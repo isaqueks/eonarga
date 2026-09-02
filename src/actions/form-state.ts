@@ -26,6 +26,12 @@ export type ImportReport = {
 
 export type ImportState = FormState & { report?: ImportReport };
 
+/** Retorno do "Chamar galera pra cá": quantos aparelhos e quantas pessoas foram avisadas. */
+export type CallGroupState = FormState & { sent?: number; recipients?: number };
+
+/** O mesmo, mais os erros de envio, pro relatório do aviso do admin. */
+export type NotifyState = CallGroupState & { failed?: number };
+
 export const EMPTY_FORM_STATE: FormState = { ok: false };
 
 /** Primeira mensagem de cada campo, no formato que os formulários esperam. */

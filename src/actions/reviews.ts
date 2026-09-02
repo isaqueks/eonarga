@@ -21,6 +21,7 @@ const PLACE_NOT_FOUND = "Lugar não encontrado.";
 const PLACE_ARCHIVED = "Esse lugar está arquivado.";
 const REVIEW_NOT_FOUND = "Avaliação não encontrada.";
 const NOT_YOURS = "Você só apaga a sua avaliação.";
+const NOT_MINE = "Essa avaliação não é sua.";
 const BAD_EMOJI = "Esse emoji não existe por aqui.";
 
 /** Ficha do lugar + as listas onde a nota aparece. */
@@ -49,11 +50,15 @@ async function findReviewWithPlace(reviewId: string) {
 }
 
 /**
- * Cria ou atualiza a minha avaliação do lugar. Uma por pessoa por lugar:
- * a nota é "a sua opinião atual", não um histórico de visitas (docs/01).
+ * Cria ou atualiza uma avaliação minha do lugar. Uma avaliação por visita (docs/08 #29):
+ * sem `reviewId` nasce uma linha nova, mesmo que eu já tenha avaliado aqui antes; com
+ * `reviewId` edita aquela avaliação específica, que precisa ser minha e deste lugar.
  */
 export async function upsertReview(_prev: FormState, formData: FormData): Promise<FormState> {
   const { user } = await assertUser();
+
+  // Fora do schema de propósito: não é conteúdo da avaliação, é o alvo da edição.
+  const reviewId = field(formData, "reviewId").trim();
 
   const parsed = reviewInputSchema.safeParse({
     placeId: field(formData, "placeId"),
@@ -80,12 +85,16 @@ export async function upsertReview(_prev: FormState, formData: FormData): Promis
 
   const now = new Date().toISOString();
 
-  const existing = await db.query.reviews.findFirst({
-    where: and(eq(reviews.placeId, place.id), eq(reviews.userId, user.id)),
-    columns: { id: true },
-  });
+  if (reviewId) {
+    const existing = await db.query.reviews.findFirst({
+      where: eq(reviews.id, reviewId),
+      columns: { id: true, userId: true, placeId: true },
+    });
+    if (!existing) return { ok: false, error: REVIEW_NOT_FOUND };
+    if (existing.userId !== user.id) return { ok: false, error: NOT_MINE };
+    // Avaliação minha, mas de outro lugar: o formulário está falando do lugar errado.
+    if (existing.placeId !== place.id) return { ok: false, error: REVIEW_NOT_FOUND };
 
-  if (existing) {
     await db
       .update(reviews)
       .set({

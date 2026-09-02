@@ -29,6 +29,13 @@
       "when": 1788380421097,
       "tag": "0003_comentarios-e-tags",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788387745923,
+      "tag": "0004_push-e-varias-avaliacoes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +17,7 @@ const ADMIN = { id: "user-admin", name: "Cadu", role: "admin" as const };
 const CATEGORY_ID = "cat-sebo";
 const PLACE_ID = "place-sebo";
 const PLACE_SLUG = "sebo-do-joao";
+const OTHER_ID = "place-bar";
 const ARCHIVED_ID = "place-morto";
 
 // Quem está logado e pra onde a action redirecionou (mesmo padrão de places.test.ts).
@@ -90,6 +91,16 @@ beforeAll(async () => {
       createdBy: ANA.id,
     },
     {
+      id: OTHER_ID,
+      slug: "bar-do-ze",
+      name: "Bar do Ze",
+      categoryId: CATEGORY_ID,
+      lat: -27.598,
+      lng: -48.549,
+      status: "active",
+      createdBy: ANA.id,
+    },
+    {
       id: ARCHIVED_ID,
       slug: "lugar-morto",
       name: "Lugar Morto",
@@ -151,6 +162,15 @@ async function myReview(userId = ANA.id) {
   });
 }
 
+/** Todas as minhas avaliacoes do lugar, da mais antiga pra mais nova. */
+async function myReviews(userId = ANA.id, placeId = PLACE_ID) {
+  return db
+    .select()
+    .from(schema.reviews)
+    .where(and(eq(schema.reviews.placeId, placeId), eq(schema.reviews.userId, userId)))
+    .orderBy(asc(schema.reviews.createdAt), asc(schema.reviews.id));
+}
+
 describe("upsertReview", () => {
   it("cria a avaliação e manda pra ficha, na âncora das avaliações", async () => {
     expect(await submit()).toBe(`/lugares/${PLACE_SLUG}#avaliacoes`);
@@ -177,11 +197,27 @@ describe("upsertReview", () => {
     expect(status?.status).toBe("visited");
   });
 
-  it("edita em cima da mesma linha, sem duplicar", async () => {
+  it("sem reviewId cria linha nova: fui duas vezes, dei duas notas", async () => {
+    await submit();
+    await submit({ rating: "4", verdict: "Segunda visita, mais fraca.", visitedAt: "2026-08-12" });
+
+    const linhas = await myReviews();
+    expect(linhas).toHaveLength(2);
+    expect(linhas.map((r) => r.rating).sort()).toEqual([4, 9]);
+    // Ids diferentes: são visitas diferentes, não uma edição.
+    expect(new Set(linhas.map((r) => r.id)).size).toBe(2);
+  });
+
+  it("com reviewId edita aquela avaliação, sem criar outra", async () => {
     await submit();
     const antes = await myReview();
 
-    await submit({ rating: "4", verdict: "Mudei de ideia.", contentHtml: "<p>Fechou cedo.</p>" });
+    await submit({
+      reviewId: antes!.id,
+      rating: "4",
+      verdict: "Mudei de ideia.",
+      contentHtml: "<p>Fechou cedo.</p>",
+    });
 
     const linhas = await db.select().from(schema.reviews);
     expect(linhas).toHaveLength(1);
@@ -197,7 +233,38 @@ describe("upsertReview", () => {
     expect(depois!.updatedAt >= antes!.updatedAt).toBe(true);
   });
 
-  it("uma pessoa por lugar: a avaliação da Bia não mexe na da Ana", async () => {
+  it("recusa reviewId de outra pessoa, de outro lugar ou inexistente", async () => {
+    await submit();
+    const daAna = (await myReview())!.id;
+
+    // Ana tem outra avaliação, mas no Bar do Ze: não serve pro formulário do Sebo.
+    await expectRedirect(() =>
+      actions.upsertReview(empty, form({ ...BASE_FIELDS, placeId: OTHER_ID })),
+    );
+    const noBar = (await myReviews(ANA.id, OTHER_ID))[0]!.id;
+
+    state.user = BIA;
+    expect(await actions.upsertReview(empty, form({ ...BASE_FIELDS, reviewId: daAna }))).toEqual({
+      ok: false,
+      error: "Essa avaliação não é sua.",
+    });
+
+    state.user = ANA;
+    expect(await actions.upsertReview(empty, form({ ...BASE_FIELDS, reviewId: noBar }))).toEqual({
+      ok: false,
+      error: "Avaliação não encontrada.",
+    });
+    expect(await actions.upsertReview(empty, form({ ...BASE_FIELDS, reviewId: "nada" }))).toEqual({
+      ok: false,
+      error: "Avaliação não encontrada.",
+    });
+
+    // Nada foi criado nem mexido pelas recusas.
+    expect(await db.select().from(schema.reviews)).toHaveLength(2);
+    expect((await myReview())!.verdict).toBe("Café bom, livro barato.");
+  });
+
+  it("cada pessoa tem as suas: a avaliação da Bia não mexe na da Ana", async () => {
     await submit();
     state.user = BIA;
     await submit({ rating: "6", verdict: "Achei caro." });
@@ -394,17 +461,49 @@ describe("queries de avaliação", () => {
     expect(daAnaAdmin.canDelete).toBe(true);
   });
 
-  it("getMyReview devolve só a minha, com canEdit", async () => {
+  it("listMyReviews devolve todas as minhas, da mais nova pra mais velha", async () => {
     await submit();
-    const minha = await queries.getMyReview(PLACE_ID, ANA.id);
-    expect(minha?.verdict).toBe("Café bom, livro barato.");
-    expect(minha?.canEdit).toBe(true);
-    expect(minha?.canDelete).toBe(true);
-    expect(await queries.getMyReview(PLACE_ID, BIA.id)).toBeNull();
+    await submit({ rating: "4", verdict: "Segunda visita, mais fraca." });
+
+    // Dois inserts podem cair no mesmo milissegundo: envelhece a primeira na mão.
+    const [primeira] = await myReviews();
+    await db
+      .update(schema.reviews)
+      .set({ createdAt: "2020-01-01T00:00:00.000Z" })
+      .where(eq(schema.reviews.id, primeira.id));
+
+    const minhas = await queries.listMyReviews(PLACE_ID, ANA.id);
+    expect(minhas).toHaveLength(2);
+    expect(minhas[0].verdict).toBe("Segunda visita, mais fraca.");
+    expect(minhas[1].verdict).toBe("Café bom, livro barato.");
+    expect(minhas.every((r) => r.canEdit && r.canDelete)).toBe(true);
+
+    expect(await queries.listMyReviews(PLACE_ID, BIA.id)).toEqual([]);
   });
 
-  it("listReviewsByUser traz o lugar junto", async () => {
+  it("getReviewById acha pelo id e marca canEdit só pra quem escreveu", async () => {
     await submit();
+    const id = (await myReview())!.id;
+
+    const daAna = await queries.getReviewById(id, { id: ANA.id, role: "member" });
+    expect(daAna?.verdict).toBe("Café bom, livro barato.");
+    expect(daAna?.placeId).toBe(PLACE_ID);
+    expect(daAna?.canEdit).toBe(true);
+
+    // Nem admin edita avaliação dos outros (só apaga).
+    const comoAdmin = await queries.getReviewById(id, { id: ADMIN.id, role: "admin" });
+    expect(comoAdmin?.canEdit).toBe(false);
+    expect(comoAdmin?.canDelete).toBe(true);
+
+    expect(await queries.getReviewById("nada", { id: ANA.id, role: "member" })).toBeNull();
+  });
+
+  it("listReviewsByUser traz o lugar junto, inclusive duas do mesmo lugar", async () => {
+    await submit();
+    await submit({ rating: "4", verdict: "Segunda visita, mais fraca." });
+    expect(await queries.listReviewsByUser(ANA.id, { id: ANA.id, role: "member" })).toHaveLength(2);
+
+    await db.delete(schema.reviews).where(eq(schema.reviews.rating, 4));
     const minhas = await queries.listReviewsByUser(ANA.id, { id: ANA.id, role: "member" });
     expect(minhas).toHaveLength(1);
     expect(minhas[0].place).toEqual({

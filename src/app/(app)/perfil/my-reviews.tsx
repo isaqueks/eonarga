@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { NargaStars } from "@/components/reviews/narga-stars";
-import { relativeFromNow } from "@/lib/dates";
+import { formatDayMonth, relativeFromNow } from "@/lib/dates";
 import { listReviewsByUser, type Viewer } from "@/lib/queries/reviews";
 
 /**
@@ -37,6 +37,13 @@ export async function MyReviews({ userId, viewer }: { userId: string; viewer: Vi
             <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
               <NargaStars stars={review.stars} size="sm" />
               <span>{relativeFromNow(review.updatedAt)}</span>
+              {/* A data da visita separa duas avaliações do mesmo lugar (docs/08 #29). */}
+              {review.visitedAt ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>visitou em {formatDayMonth(review.visitedAt)}</span>
+                </>
+              ) : null}
             </div>
 
             <blockquote className="border-narga/60 border-l-2 pl-2 text-sm italic">

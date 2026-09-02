@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { db } from "@/lib/db/client";
 import {
   categories,
+  notifications,
   places,
   reviewReactions,
   reviews,
@@ -41,7 +42,9 @@ export type FeedEvent =
       emoji: string;
       /** Nome de quem escreveu a avaliação que levou a reação. */
       reviewAuthor: string;
-    };
+    }
+  /** "Chamar galera pra cá" (src/actions/push.ts): fica no feed mesmo pra quem não usa push. */
+  | { kind: "call"; at: string; user: PersonRef; place: FeedPlaceRef };
 
 export const FEED_DEFAULT_LIMIT = 50;
 const FEED_MAX_LIMIT = 200;
@@ -63,6 +66,9 @@ export function feedEventKey(event: FeedEvent): string {
       return `status:${event.user.id}:${event.place.slug}`;
     case "reaction":
       return `reaction:${event.user.id}:${event.place.slug}:${event.emoji}`;
+    // A mesma pessoa chama o mesmo lugar mais de uma vez (em dias diferentes): entra a hora.
+    case "call":
+      return `call:${event.user.id}:${event.place.slug}:${event.at}`;
   }
 }
 
@@ -90,9 +96,9 @@ function toPerson(row: PersonRow): PersonRef {
 }
 
 /**
- * Novidades do grupo: avaliação, lugar novo, "quero ir"/"já fui" e reação.
+ * Novidades do grupo: avaliação, lugar novo, "quero ir"/"já fui", reação e chamada.
  *
- * São quatro queries independentes (uma por tipo), cada uma já limitada e
+ * São cinco queries independentes (uma por tipo), cada uma já limitada e
  * ordenada no banco; o merge é em memória. Uma UNION daria a mesma coisa com
  * colunas que só existem pra um dos tipos — não compensa.
  *
@@ -110,7 +116,7 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
   const reactor = alias(users, "reactor");
   const reviewAuthor = alias(users, "review_author");
 
-  const [reviewRows, placeRows, statusRows, reactionRows] = await Promise.all([
+  const [reviewRows, placeRows, statusRows, reactionRows, callRows] = await Promise.all([
     db
       .select({
         ...person,
@@ -171,6 +177,24 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
       .where(and(eq(places.status, "active"), olderThan(reviewReactions.createdAt)))
       .orderBy(desc(reviewReactions.createdAt))
       .limit(limit),
+
+    // Aviso do admin (`kind = "admin"`) não é novidade do grupo e fica de fora; o
+    // innerJoin com places já derruba as linhas sem lugar.
+    db
+      .select({ ...person, ...placeRef, at: notifications.createdAt })
+      .from(notifications)
+      .innerJoin(users, eq(users.id, notifications.createdBy))
+      .innerJoin(places, eq(places.id, notifications.placeId))
+      .innerJoin(categories, eq(categories.id, places.categoryId))
+      .where(
+        and(
+          eq(notifications.kind, "call"),
+          eq(places.status, "active"),
+          olderThan(notifications.createdAt),
+        ),
+      )
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit),
   ]);
 
   const events: FeedEvent[] = [
@@ -203,6 +227,12 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
       place: toPlace(row),
       emoji: row.emoji,
       reviewAuthor: row.authorName,
+    })),
+    ...callRows.map((row): FeedEvent => ({
+      kind: "call",
+      at: row.at,
+      user: toPerson(row),
+      place: toPlace(row),
     })),
   ];
 

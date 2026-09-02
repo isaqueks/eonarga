@@ -135,6 +135,7 @@ Erro genérico "Email ou senha errados" (não revela qual). Sem "esqueci a senha
 └──────────────────────────┘
 ```
 
+- O CTA vira **"✍️ Fui de novo? Dá outra nota"** pra quem já avaliou: cada visita rende uma avaliação nova (docs/08 #29). Com duas ou mais, um contador discreto embaixo do botão ("você já avaliou 2 vezes"). O "Editar" do menu ⋯ de cada card leva pra `avaliar?review=<id>`.
 - "Abrir no Maps" usa `https://www.google.com/maps/search/?api=1&query=LAT,LNG` (ou o link original colado). "Ir" usa `https://www.google.com/maps/dir/?api=1&destination=LAT,LNG`. Nenhum dos dois precisa de chave.
 
 ### Novo lugar (3 passos, um por tela)

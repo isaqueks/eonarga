@@ -167,6 +167,27 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(page.locator("a", { hasText: /Como chegar/i })).toHaveAttribute("href", /maps\/dir/);
   await shot(page, "08-ficha");
 
+  // Fui de novo: cada visita rende uma avaliação nova (docs/08 #29).
+  await page.getByText("Fui de novo? Dá outra nota").click();
+  await page.waitForURL(/\/lugares\/sebo-do-joao\/avaliar$/);
+  await expect(page.getByText(/Você já deu nota aqui 1 vez/)).toBeVisible();
+  const sliderDeNovo = page.getByRole("slider");
+  await sliderDeNovo.focus();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("PageUp");
+  await page.keyboard.press("PageUp");
+  await expect(sliderDeNovo).toHaveAttribute("aria-valuetext", /3,0 de 5/);
+  await page.locator('input[name="verdict"]').fill("Voltei e tava meia boca");
+  await page.getByRole("button", { name: "Publicar" }).click();
+
+  // Ficha: as duas contam na contagem e na média ((5,0 + 3,0) / 2 = 4,0).
+  await page.waitForURL(/\/lugares\/sebo-do-joao(#avaliacoes)?$/);
+  await expect(page.getByRole("heading", { name: "Avaliações (2)" })).toBeVisible();
+  await expect(page.getByText("Voltei e tava meia boca")).toBeVisible();
+  await expect(page.getByText("você já avaliou 2 vezes")).toBeVisible();
+  await expect(page.getByText("4,0").first()).toBeVisible();
+  await shot(page, "08c-ficha-duas-notas");
+
   // Quero ir
   await page.getByRole("button", { name: /Quero ir/ }).click();
   await expect(page.getByText(/Querem ir:.*Admin/)).toBeVisible();
@@ -178,10 +199,10 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(page.getByText(/Admin quer ir/)).toBeVisible();
   await shot(page, "10-role");
 
-  // Ranking: primeiro lugar, com o veredito como citação
+  // Ranking: primeiro lugar, com o veredito mais recente como citação
   await page.goto("/");
   await expect(page.getByRole("link", { name: /Sebo do João/ })).toBeVisible();
-  await expect(page.getByText("Melhor sebo do Centro, sem discussão")).toBeVisible();
+  await expect(page.getByText("Voltei e tava meia boca")).toBeVisible();
   await expect(page.getByText("poucas notas").first()).toBeVisible();
   await page.goto("/?cat=restaurante");
   await expect(page.getByRole("link", { name: /Sebo do João/ })).toHaveCount(0);
@@ -252,9 +273,9 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
     }
   }
   await expect(avatarImg).toHaveAttribute("src", /\/api\/uploads\/[A-Za-z0-9_-]+/);
-  // "Minhas avaliações" lista o lugar avaliado com link pra ficha.
+  // "Minhas avaliações" lista as duas visitas do mesmo lugar, cada uma com link pra ficha.
   await expect(page.getByText("Minhas avaliações")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Sebo do João/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Sebo do João/ })).toHaveCount(2);
 
   // Foto do lugar: manda pela ficha e confere a thumb na grade.
   await page.goto("/lugares/sebo-do-joao");

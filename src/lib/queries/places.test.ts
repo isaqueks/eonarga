@@ -146,6 +146,33 @@ describe("listPlaces com avaliações de verdade", () => {
     expect(bar.approved).toBe(false);
   });
 
+  it("duas visitas da mesma pessoa contam as duas na média e na contagem", async () => {
+    // Uma avaliação por visita (docs/08 #29): o agregado soma as linhas, não as pessoas.
+    await db.insert(schema.reviews).values({
+      id: "rev-ana-2",
+      placeId: SEBO,
+      userId: ANA.id,
+      rating: 6,
+      verdict: "Voltei, tava meia boca.",
+      updatedAt: "2026-08-25T10:00:00.000Z",
+    });
+
+    const sebo = await bySlug("sebo-do-joao");
+    expect(sebo.reviewCount).toBe(3);
+    // (10 + 9 + 6) / 2 / 3 = 4,166…
+    expect(sebo.meanStars).toBeCloseTo(25 / 6, 5);
+    // E a mais recente das três é a segunda visita da Ana.
+    expect(sebo.latestVerdict).toBe("Voltei, tava meia boca.");
+    expect(sebo.latestVerdictAuthor).toBe("Ana");
+
+    // A média global também conta as duas.
+    const { totalCount, totalStars } = await queries.getGlobalRatingStats();
+    expect(totalCount).toBe(4);
+    expect(totalStars).toBeCloseTo(14.5, 5);
+
+    await db.delete(schema.reviews).where(eq(schema.reviews.id, "rev-ana-2"));
+  });
+
   it("ganha o selo com 3 notas altas e perde quando cai", async () => {
     await db.insert(schema.reviews).values({
       id: "rev-selo",

@@ -318,7 +318,7 @@ describe("listCommentsForReviews", () => {
       role: "member",
     });
     expect(lista[0].comments.map((c) => c.body)).toEqual(["resposta na ficha"]);
-    // `getMyReview` não carrega a thread de propósito.
-    expect((await reviewQueries.getMyReview(PLACE_ID, ANA.id))?.comments).toEqual([]);
+    // `listMyReviews` não carrega a thread de propósito.
+    expect((await reviewQueries.listMyReviews(PLACE_ID, ANA.id))[0]?.comments).toEqual([]);
   });
 });

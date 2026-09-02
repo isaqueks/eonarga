@@ -110,6 +110,15 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 6. [x] Exportar JSON (`/api/admin/export`) / importar links do Maps ou CSV do Takeout (`/admin/importar`)
 7. [x] Link público somente leitura (`/p/<slug>?t=<token>`, HMAC com `APP_SECRET`; sem a variável o recurso some)
 
+## Fase 7 — Push e várias avaliações (pedido em 02/09/2026)
+
+- [x] Web Push: `lib/push.ts` (VAPID, `web-push`, limpeza de assinaturas mortas), `push_subscriptions` e `notifications` (migration 0004), `push` e `notificationclick` no `sw.js`
+- [x] Toggle "Ativar notificações" no perfil e lembrete no ranking; `GET /api/push/public-key` lê a chave em runtime
+- [x] "Chamar galera pra cá" na ficha, com confirmação, rate limit e evento no feed
+- [x] `/admin/notificar`: aviso arbitrário pra uma pessoa ou pra todos, com histórico
+- [x] Uma avaliação por visita: unique de `reviews` removido, `avaliar?review=<id>` edita, "Fui de novo? Dá outra nota", todas contam na média
+- [ ] Testar o push num Android e num iPhone de verdade (prompt, entrega, toque na notificação)
+
 ## Definição de pronto (qualquer tarefa)
 
 - Funciona no celular (Chrome Android e Safari iOS) e no desktop

@@ -33,6 +33,9 @@ const T = {
   jaFui: "2026-08-07T10:00:00.000Z",
   reacao: "2026-08-08T10:00:00.000Z",
   notaArquivada: "2026-08-09T10:00:00.000Z",
+  chamada: "2026-08-10T10:00:00.000Z",
+  chamadaMorto: "2026-08-11T10:00:00.000Z",
+  aviso: "2026-08-12T10:00:00.000Z",
 };
 
 beforeAll(async () => {
@@ -141,6 +144,41 @@ beforeAll(async () => {
     { reviewId: "rev-ana", userId: CADU.id, emoji: "🔥", createdAt: T.reacao },
     { reviewId: "rev-morto", userId: ANA.id, emoji: "👍", createdAt: T.notaArquivada },
   ]);
+
+  await db.insert(schema.notifications).values([
+    {
+      id: "notif-chamada",
+      kind: "call",
+      title: "E o narga?",
+      body: "Bia chamou a galera pro Sebo do João",
+      url: "/lugares/sebo-do-joao",
+      placeId: SEBO,
+      createdBy: BIA.id,
+      sentCount: 2,
+      createdAt: T.chamada,
+    },
+    {
+      id: "notif-chamada-morto",
+      kind: "call",
+      title: "E o narga?",
+      body: "Cadu chamou a galera pro Lugar Morto",
+      url: "/lugares/lugar-morto",
+      placeId: MORTO,
+      createdBy: CADU.id,
+      sentCount: 1,
+      createdAt: T.chamadaMorto,
+    },
+    // Aviso do admin não tem lugar e não é novidade do grupo: fica fora do feed.
+    {
+      id: "notif-aviso",
+      kind: "admin",
+      title: "Aviso",
+      body: "Sexta tem rolê",
+      createdBy: CADU.id,
+      sentCount: 3,
+      createdAt: T.aviso,
+    },
+  ]);
 });
 
 afterAll(() => {
@@ -153,11 +191,12 @@ afterAll(() => {
 });
 
 describe("listFeed", () => {
-  it("junta os quatro tipos de evento, do mais novo pro mais velho", async () => {
+  it("junta os cinco tipos de evento, do mais novo pro mais velho", async () => {
     const events = await feed.listFeed();
 
     expect(events.map((e) => e.at)).toEqual([...events.map((e) => e.at)].sort().reverse());
     expect(events.map((e) => `${e.kind}@${e.at}`)).toEqual([
+      `call@${T.chamada}`,
       `reaction@${T.reacao}`,
       `status@${T.jaFui}`,
       `status@${T.querIr}`,
@@ -197,21 +236,34 @@ describe("listFeed", () => {
       emoji: "🔥",
       reviewAuthor: "Ana",
     });
+
+    expect(byKind("call")[0]).toMatchObject({
+      at: T.chamada,
+      user: { id: BIA.id, name: "Bia", avatarId: null },
+      place: { slug: "sebo-do-joao", name: "Sebo do João", emoji: "📚" },
+    });
+  });
+
+  it("ignora o aviso do admin, que não é evento do grupo", async () => {
+    const events = await feed.listFeed();
+
+    expect(events.filter((e) => e.kind === "call")).toHaveLength(1);
+    expect(events.some((e) => e.at === T.aviso)).toBe(false);
   });
 
   it("ignora tudo que é de lugar arquivado", async () => {
     const events = await feed.listFeed();
 
     expect(events.some((e) => e.place.slug === "lugar-morto")).toBe(false);
-    expect(events).toHaveLength(7);
+    expect(events).toHaveLength(8);
   });
 
   it("respeita o limite", async () => {
     const events = await feed.listFeed({ limit: 3 });
 
     expect(events).toHaveLength(3);
-    expect(events[0].kind).toBe("reaction");
-    expect(events[2].at).toBe(T.querIr);
+    expect(events[0].kind).toBe("call");
+    expect(events[2].at).toBe(T.jaFui);
   });
 
   it("pagina com o cursor `before`", async () => {
@@ -220,10 +272,10 @@ describe("listFeed", () => {
 
     expect(segunda).toHaveLength(3);
     expect(segunda.every((e) => e.at < primeira[2].at)).toBe(true);
-    expect(segunda.map((e) => e.at)).toEqual([T.notaCadu, T.notaAna, T.barCriado]);
+    expect(segunda.map((e) => e.at)).toEqual([T.querIr, T.notaCadu, T.notaAna]);
 
     const terceira = await feed.listFeed({ limit: 3, before: segunda[2].at });
-    expect(terceira.map((e) => e.at)).toEqual([T.seboCriado]);
+    expect(terceira.map((e) => e.at)).toEqual([T.barCriado, T.seboCriado]);
 
     expect(await feed.listFeed({ before: T.seboCriado })).toEqual([]);
   });

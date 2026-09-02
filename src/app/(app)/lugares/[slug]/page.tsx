@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { PlacesMapLazy } from "@/components/map/places-map-lazy";
 import { PeopleList } from "@/components/people-list";
+import { CallGroupButton } from "@/components/places/call-group-button";
 import { HasNargaBadge } from "@/components/places/has-narga-badge";
 import { MapsButtons } from "@/components/places/maps-buttons";
 import { PlacePhotos } from "@/components/places/place-photos";
@@ -20,6 +21,7 @@ import { Separator } from "@/components/ui/separator";
 import { requireUser } from "@/lib/auth/guards";
 import { formatReviewCount, formatStars, instagramHandle } from "@/lib/format";
 import { getPlaceBySlug, listTagsWithCounts } from "@/lib/queries/places";
+import { isPushEnabled } from "@/lib/push";
 import { getReviewsForPlace } from "@/lib/queries/reviews";
 import { shareUrlFor } from "@/lib/share";
 
@@ -44,7 +46,8 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
     getReviewsForPlace(place.id, { id: user.id, role: user.role }),
     listTagsWithCounts(),
   ]);
-  const myReview = reviews.find((review) => review.author.id === user.id) ?? null;
+  // Uma avaliação por visita (docs/08 #29): dá pra ter várias minhas no mesmo lugar.
+  const myReviews = reviews.filter((review) => review.author.id === user.id);
   // Sugestões do "+ tag": as mais usadas no grupo, fora as que o lugar já tem.
   const tagSuggestions = topTags
     .map((t) => t.tag)
@@ -132,6 +135,13 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
 
       <MapsButtons lat={place.lat} lng={place.lng} googleMapsUrl={place.googleMapsUrl} />
       <StatusButtons placeId={place.id} initial={place.myStatus} />
+      {/* Push pra todo mundo: "Fulano chamou a galera pro X". Some se o servidor não tem VAPID. */}
+      <CallGroupButton
+        placeId={place.id}
+        placeName={place.name}
+        enabled={isPushEnabled()}
+        disabled={place.status !== "active"}
+      />
 
       <Separator />
 
@@ -200,14 +210,21 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
       <Separator />
 
       {place.status === "archived" ? null : (
-        <Button
-          size="lg"
-          className="h-12 text-base"
-          nativeButton={false}
-          render={<Link href={`/lugares/${place.slug}/avaliar`} />}
-        >
-          {myReview ? "Editar minha nota" : "✍️ Dar minha nota"}
-        </Button>
+        <div className="flex flex-col gap-1.5">
+          <Button
+            size="lg"
+            className="h-12 text-base"
+            nativeButton={false}
+            render={<Link href={`/lugares/${place.slug}/avaliar`} />}
+          >
+            {myReviews.length > 0 ? "✍️ Fui de novo? Dá outra nota" : "✍️ Dar minha nota"}
+          </Button>
+          {myReviews.length >= 2 ? (
+            <p className="text-muted-foreground text-center text-xs">
+              você já avaliou {myReviews.length} vezes
+            </p>
+          ) : null}
+        </div>
       )}
 
       <section id="avaliacoes" className="flex scroll-mt-20 flex-col gap-3">

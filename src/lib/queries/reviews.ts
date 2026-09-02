@@ -163,23 +163,51 @@ export async function getReviewsForPlace(placeId: string, viewer: Viewer): Promi
   );
 }
 
-/** A minha avaliação desse lugar (pra decidir entre "Dar minha nota" e "Editar"). */
-export async function getMyReview(placeId: string, userId: string): Promise<ReviewItem | null> {
+/**
+ * As minhas avaliações desse lugar, da mais recente pra mais antiga. Pode ser mais de
+ * uma: é uma por visita (docs/08 #29). Serve pra escolher a copy do CTA da ficha e o
+ * aviso de "essa é outra visita" na tela de avaliar.
+ */
+export async function listMyReviews(placeId: string, userId: string): Promise<ReviewItem[]> {
   const rows = (await db
     .select(reviewColumns)
     .from(reviews)
     .innerJoin(users, eq(users.id, reviews.userId))
     .where(and(eq(reviews.placeId, placeId), eq(reviews.userId, userId)))
+    // Pela criação, não pela edição: editar uma antiga não a promove a "a mais nova".
+    .orderBy(desc(reviews.createdAt), desc(reviews.id))) as ReviewRow[];
+
+  if (rows.length === 0) return [];
+
+  const reactions = await loadReactions(
+    rows.map((row) => row.id),
+    userId,
+  );
+  // São as próprias avaliações: `canEdit`/`canDelete` não dependem do papel. As respostas
+  // ficam de fora porque quem chama isso não desenha card (a thread vem pela
+  // `getReviewsForPlace`, que é quem desenha).
+  return rows.map((row) =>
+    buildItem(row, reactions.get(row.id) ?? [], [], { id: userId, role: "member" }),
+  );
+}
+
+/**
+ * Uma avaliação pelo id, pra tela de editar. `canEdit` sai de quem está olhando —
+ * quem chama decide o que fazer com avaliação de outra pessoa (a tela dá 404).
+ */
+export async function getReviewById(reviewId: string, viewer: Viewer): Promise<ReviewItem | null> {
+  const rows = (await db
+    .select(reviewColumns)
+    .from(reviews)
+    .innerJoin(users, eq(users.id, reviews.userId))
+    .where(eq(reviews.id, reviewId))
     .limit(1)) as ReviewRow[];
 
   const row = rows[0];
   if (!row) return null;
 
-  const reactions = await loadReactions([row.id], userId);
-  // É a própria avaliação: `canEdit`/`canDelete` não dependem do papel. As respostas
-  // ficam de fora porque quem chama isso só quer saber "já dei nota?" (a thread vem
-  // pela `getReviewsForPlace`, que é quem desenha o card).
-  return buildItem(row, reactions.get(row.id) ?? [], [], { id: userId, role: "member" });
+  const reactions = await loadReactions([row.id], viewer.id);
+  return buildItem(row, reactions.get(row.id) ?? [], [], viewer);
 }
 
 /** Avaliações de uma pessoa, com o lugar junto. Usado no perfil. */

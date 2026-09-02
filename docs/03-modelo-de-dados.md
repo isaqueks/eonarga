@@ -97,7 +97,7 @@ Seed inicial: Restaurante 🍽️, Bar 🍺, Café ☕, Lanchonete 🍔, Sebo �
 | visited_at             | text null | só data, sem hora                                  |
 | created_at, updated_at | text      |                                                    |
 
-Unique `(place_id, user_id)`. Uma pessoa, uma opinião por lugar.
+Índice comum (não único) em `(place_id, user_id)`: uma pessoa pode ter várias avaliações no mesmo lugar, uma por visita (docs/08 #29). O unique antigo caiu na migration `0004`.
 
 ### user_place_status
 
@@ -139,7 +139,7 @@ Média simples deixa um lugar com uma única nota 5 acima de um lugar com vinte 
 score = (C * m + soma_das_notas) / (C + n)
 ```
 
-- `n` = nº de avaliações do lugar
+- `n` = nº de avaliações do lugar (**todas as visitas contam**, inclusive duas da mesma pessoa)
 - `m` = média global de todas as avaliações de lugares ativos
 - `C` = peso do "prior" = **3** (equivale a: "até ter 3 avaliações, desconfio")
 
