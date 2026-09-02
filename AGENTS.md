@@ -14,7 +14,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Idioma: código e identificadores em inglês; toda copy visível ao usuário em pt-BR informal (ver tom em `docs/04-ui-ux.md`). Comentários em pt-BR.
 - Gerenciador de pacotes: **npm** (não pnpm/yarn). Scripts em `package.json`.
 - Next 16 (App Router, Turbopack): `proxy.ts` no lugar de `middleware.ts`; `cookies()`, `headers()`, `params`, `searchParams` são async; tipos `PageProps<'/rota'>` e `LayoutProps<'/rota'>` são globais.
-- UI: Tailwind v4 + shadcn (preset `base-nova`, componentes em `src/components/ui`, adicionar com `npx shadcn@latest add <nome>`), ícones `lucide-react`. Tema escuro é o padrão (`<html class="dark">`); tokens em `src/app/globals.css`.
+- UI: Tailwind v4 + shadcn (preset `base-nova`, componentes em `src/components/ui`, adicionar com `npx shadcn@latest add <nome>`), ícones `lucide-react`. Tema escuro é o padrão (`next-themes` põe a classe `dark` no `<html>`; o claro existe e tem toggle no perfil); tokens em `src/app/globals.css`.
 - Banco: SQLite via Drizzle (`src/lib/db/schema.ts`). Mudou o schema → `npm run db:generate` e commite a migration em `drizzle/`. IDs com `nanoid(12)`. Datas ISO em `text`; sete `updatedAt` manualmente nos UPDATEs.
 - Mutações só por Server Actions (`src/actions/*`), sempre validando com Zod e checando permissão com `requireUser()` / `requireAdmin()` (`src/lib/auth/guards.ts`). Route Handlers só pra upload, imagens e proxies.
 - Lógica pura (ranking, parsers, sanitização, auth) tem teste em Vitest ao lado do arquivo (`*.test.ts`).

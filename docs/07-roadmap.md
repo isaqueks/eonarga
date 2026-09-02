@@ -82,13 +82,14 @@ Fases curtas, cada uma termina com algo usável. A ordem é a dependência real:
 
 **Meta**: instalado no celular de todo mundo.
 
-- [ ] Manifest, ícones, metas Apple, Serwist com as estratégias do [06](./06-pwa-e-assets.md)
-- [ ] Página offline, toast de atualização, banner de instalação (Android) e instrução (iOS)
-- [ ] Estados vazios e erros com a copy do [04](./04-ui-ux.md)
-- [ ] Lighthouse mobile: PWA ok, performance ≥ 80, acessibilidade ≥ 90
-- [ ] Playwright: login → criar lugar → avaliar → ver no ranking
+- [x] Manifest, ícones, metas Apple, service worker **escrito à mão** (`public/sw.js`) com as estratégias do [06](./06-pwa-e-assets.md) — Serwist ficou de fora porque o plugin dele é webpack e o build aqui é Turbopack
+- [x] Página offline (`/~offline`), toast "Tem versão nova. Atualizar?", banner de instalação (Android) e instrução (iOS)
+- [x] Tema claro com `next-themes` e toggle no perfil ("Modo claro? E o narga?"), com os ajustes de contraste que ele exigiu
+- [x] Estados vazios e erros com a copy do [04](./04-ui-ux.md): faltavam o 404 global (`src/app/not-found.tsx`) e o erro 500 (`src/app/error.tsx`); o resto já existia desde as fases 2 e 3
+- [x] Lighthouse: `/login` mobile 91 / 100 / 100 e desktop 100 / 100 / 100 (performance / acessibilidade / boas práticas). A categoria `pwa` não existe mais no Lighthouse 12; manifest e SW conferidos na mão
+- [x] Playwright: o smoke cobre login → criar lugar → avaliar → ranking, e ganhou o toggle de tema, o 404 e a página offline
 
-**Pronto quando**: Lighthouse verde e o ícone do cachorro na tela inicial de um Android e de um iPhone.
+**Pronto quando**: Lighthouse verde e o ícone do cachorro na tela inicial de um Android e de um iPhone. Código pronto em 02/09/2026; falta instalar de fato num Android e num iPhone de verdade.
 
 ## Fase 5 — Deploy
 

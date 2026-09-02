@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Rubik_Mono_One } from "next/font/google";
 
+import { ServiceWorker } from "@/components/pwa/service-worker";
+import { ThemeProvider } from "@/components/pwa/theme-provider";
+
 import "./globals.css";
 
 const display = Rubik_Mono_One({
@@ -19,6 +22,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Escuro é o padrão; no claro o `ThemeProvider` troca essa meta no cliente.
 export const viewport: Viewport = {
   themeColor: "#0e1110",
   width: "device-width",
@@ -28,8 +32,19 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pt-BR" className={`${display.variable} dark h-full antialiased`}>
-      <body className="bg-background text-foreground flex min-h-full flex-col">{children}</body>
+    // `suppressHydrationWarning`: o next-themes escreve a classe do tema no <html>
+    // antes da hidratação, então o servidor e o cliente divergem aqui de propósito.
+    <html
+      lang="pt-BR"
+      className={`${display.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
+      <body className="bg-background text-foreground flex min-h-full flex-col">
+        <ThemeProvider>
+          {children}
+          <ServiceWorker />
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

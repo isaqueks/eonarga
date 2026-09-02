@@ -54,7 +54,7 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Tema claro (existe, mas escuro é o padrão: <html class="dark">) */
+/* Tema claro (existe, mas escuro é o padrão: o next-themes põe `.dark` no <html>) */
 :root {
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -66,29 +66,31 @@
   --card-foreground: #141a17;
   --popover: #ffffff;
   --popover-foreground: #141a17;
-  --primary: #d99a1a;
-  --primary-foreground: #141a17;
+  /* Âmbar escurecido: o #f4b942 do tema escuro dá 2,4:1 em `text-primary`
+     sobre fundo claro. Este passa AA (4,7:1) e ainda é o amarelo do app. */
+  --primary: #96650a;
+  --primary-foreground: #ffffff;
   --secondary: #e6eae8;
   --secondary-foreground: #141a17;
   --muted: #eceeed;
   --muted-foreground: #5d6661;
   --accent: #e3f2ea;
   --accent-foreground: #1f5a3d;
-  --destructive: #d64545;
+  --destructive: #c62828;
   --border: #d5dbd8;
   --input: #d5dbd8;
   --ring: #2f7a56;
   --narga: #2f7a56;
   --narga-foreground: #ffffff;
-  --chart-1: #d99a1a;
+  --chart-1: #96650a;
   --chart-2: #2f7a56;
   --chart-3: #5d6661;
   --chart-4: #8a9bb8;
   --chart-5: #c58ad9;
   --sidebar: #ffffff;
   --sidebar-foreground: #141a17;
-  --sidebar-primary: #d99a1a;
-  --sidebar-primary-foreground: #141a17;
+  --sidebar-primary: #96650a;
+  --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #e3f2ea;
   --sidebar-accent-foreground: #1f5a3d;
   --sidebar-border: #d5dbd8;

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/empty-state";
 import { CategoryChips } from "@/components/places/category-chips";
+import { InstallBanner } from "@/components/pwa/install-banner";
 import { RankingControls } from "@/components/places/ranking-controls";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/guards";
@@ -100,6 +101,7 @@ export default async function RankingPage({ searchParams }: PageProps<"/">) {
   return (
     <div className="flex flex-1 flex-col gap-3 p-4">
       <CategoryChips categories={categories} />
+      <InstallBanner />
       {nothingAtAll ? null : <RankingControls />}
 
       {nothingAtAll ? (

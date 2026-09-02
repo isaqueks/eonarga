@@ -256,8 +256,31 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(page.locator("#gender")).toHaveValue("Alfa de Floripa");
   await expect(page.locator("#testosterone")).toHaveValue("5000");
   await shot(page, "15-perfil");
+
+  // Tema: o toggle tira e devolve a classe `dark` do <html> (next-themes).
+  const html = page.locator("html");
+  await expect(html).toHaveClass(/dark/);
+  await page.getByRole("button", { name: "Modo claro? E o narga?" }).click();
+  await expect(html).not.toHaveClass(/dark/);
+  await shot(page, "16-tema-claro");
+  await page.getByRole("button", { name: "Voltar pro escuro" }).click();
+  await expect(html).toHaveClass(/dark/);
+
+  // 404 global (URL que não casa com rota nenhuma).
+  await page.goto("/isso-nao-existe-mesmo");
+  await expect(page.getByText("Esse lugar não existe.")).toBeVisible();
+  await shot(page, "17-404");
+
+  await page.goto("/perfil");
   await page.getByRole("button", { name: "Sair" }).click();
   await page.waitForURL(/\/login/);
+});
+
+test("página offline é pública e tem a copy do cachorro", async ({ page }) => {
+  await page.goto("/~offline");
+  await expect(page.getByRole("heading", { name: "Sem internet." })).toBeVisible();
+  await expect(page.getByText("E o narga? Fica pra depois.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Tentar de novo" })).toBeVisible();
 });
 
 test("página de termos é pública e tem a piada", async ({ page }) => {

@@ -14,6 +14,9 @@ const PUBLIC_PATHS = new Set([
   "/icon.png",
   "/apple-icon.png",
   "/~offline",
+  // O SW é buscado sem passar por página nenhuma; se caísse no redirect de login,
+  // a atualização quebraria toda vez que a sessão vencesse.
+  "/sw.js",
   "/api/health",
 ]);
 

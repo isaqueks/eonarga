@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/auth/guards";
 import { MyReviews } from "./my-reviews";
 import { ProfileAvatar } from "./profile-avatar";
 import { ProfileForm } from "./profile-form";
+import { ThemeToggle } from "./theme-toggle";
 
 export const metadata: Metadata = { title: "Perfil" };
 
@@ -56,6 +57,7 @@ export default async function PerfilPage() {
             Administração
           </Link>
         ) : null}
+        <ThemeToggle />
       </section>
 
       <Separator />
