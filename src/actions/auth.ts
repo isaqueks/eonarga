@@ -88,7 +88,10 @@ export async function login(_prevState: FormState, formData: FormData): Promise<
   resetRateLimit(rateKey);
 
   const now = new Date().toISOString();
-  await db.update(users).set({ lastLoginAt: now, updatedAt: now }).where(eq(users.id, user.id));
+  await db
+    .update(users)
+    .set({ lastLoginAt: now, lastSeenAt: now, updatedAt: now })
+    .where(eq(users.id, user.id));
 
   const userAgent = (await headers()).get("user-agent");
   const { token, expiresAt } = await createSession(user.id, userAgent);

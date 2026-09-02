@@ -119,6 +119,18 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Uma avaliação por visita: unique de `reviews` removido, `avaliar?review=<id>` edita, "Fui de novo? Dá outra nota", todas contam na média
 - [ ] Testar o push num Android e num iPhone de verdade (prompt, entrega, toque na notificação)
 
+## Fase 8 — Posts no feed (pedido em 02/09/2026)
+
+- [x] Tabela `posts` (migration 0005): `body` e/ou `photo_id`, `place_id` opcional, `lat/lng` sempre, `address`, índices em `created_at` e `user_id`
+- [x] `lib/posts.ts` puro (limite de 1000, `haversineMeters`, `nearestPlace` a 150 m, `postInputSchema`, prévia do texto) com teste
+- [x] `createPost` / `deletePost` (`actions/posts.ts`): foto reprocessada pelo sharp, lugar ativo manda na coordenada, 20 posts/hora, apaga a imagem junto
+- [x] `queries/posts.ts` (uma query com join em users e left join em places/categories) entrando no merge do `listFeed`
+- [x] Feed com botão "📸 Postar", card de post (foto em tela cheia, menu "⋯" com Apagar) e **avaliação também como card** (nargas, veredito e prévia com "ver avaliação")
+- [x] `/feed/novo`: foto com câmera, texto com contador e os três jeitos de dizer onde ("onde estou" com "Você tá no X?", lista de lugares por distância, pino no mapa)
+- [x] E2E: postar com lugar, postar só foto pelo mapa, apagar pelo menu e conferir a avaliação como card
+
+- [x] Correção: "visto por último" na galera passa a refletir o último uso (`last_seen_at`, folga de 5 min), não o último login
+
 ## Definição de pronto (qualquer tarefa)
 
 - Funciona no celular (Chrome Android e Safari iOS) e no desktop

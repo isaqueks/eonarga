@@ -81,13 +81,28 @@ Não existe visitante anônimo: tudo exige login.
 
 - **Fotos**: upload na avaliação e na ficha do lugar (redimensionadas, sem EXIF).
 - **Sortear rolê**: "roleta" que escolhe um lugar aleatório entre os filtros (categoria, quero ir, tem narga). Resolve a discussão de "onde vamos hoje".
-- **Feed**: "Fulano deu 4,5 nargas pro Sebo X", "Ciclana adicionou Y".
+- **Feed**: "Fulano deu 4,5 nargas pro Sebo X", "Ciclana adicionou Y" — virou também o lugar dos **posts** (seção abaixo).
 - **Placar de pessoas**: quem mais avaliou, crítico mais rigoroso (menor média), quem mais adicionou.
 - **Respostas** em avaliações (thread curta).
 - **Tags livres** além da categoria ("aceita pix", "bom e barato", "fecha cedo").
 - **Exportar/importar**: backup em JSON; importar lista salva do Google Maps (o Takeout gera CSV com nome + link, e o parser de link já vai existir).
 - **Link público somente leitura** de um lugar ou do ranking, pra mandar pra alguém de fora.
 - **Modo "estou aqui"**: lista lugares num raio de 300 m e botão "avaliar agora".
+
+## Feed
+
+O `/feed` é a linha do tempo do grupo. Duas coisas convivem lá:
+
+- **Novidades** (automáticas): avaliação nova, lugar novo, "quero ir"/"já fui", reação e "chamar galera". Avaliação aparece como **card** (nota em nargas, veredito e prévia do texto, com link pra ficha); o resto continua sendo uma linha curta.
+- **Posts** (escritos à mão, botão "📸 Postar"): **foto e/ou texto** (pelo menos um dos dois) e **sempre com quem postou e de onde**.
+
+Regras do post:
+
+- "De onde" é obrigatório e vem de um dos três jeitos: **onde estou** (GPS + endereço por reverse geocoding; se tiver um lugar cadastrado a menos de 150 m, o app pergunta "Você tá no Sebo do João?"), **escolher lugar** (lista com busca, ordenada por distância quando tem GPS) ou **marcar no mapa** (o mesmo pino do cadastro de lugar).
+- Com lugar escolhido, a coordenada e o endereço são os do lugar; sem lugar, ficam a coordenada do GPS/mapa e o endereço do reverse geocoding (ou só a coordenada, se ele não responder).
+- Texto puro, até 1000 caracteres, com quebras de linha. Foto reprocessada pelo sharp (webp, sem EXIF), igual às fotos de lugar.
+- Post **fica pra sempre** na timeline. Quem apaga é quem postou (ou admin), e a imagem some junto.
+- Limite de 20 posts por hora por pessoa ("Calma, influencer."). Não é moderação: é pra ninguém entupir o feed sem querer.
 
 ## Não-objetivos (de propósito)
 

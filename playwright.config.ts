@@ -22,8 +22,9 @@ for (const suffix of ["", "-wal", "-shm"]) {
 export default defineConfig({
   testDir: "./e2e",
   // O smoke é um fluxo só, longo (e em dev cada action compila na primeira chamada);
-  // com a segunda avaliação do mesmo lugar ele passou de 2 min.
-  timeout: 180_000,
+  // com a segunda avaliação do mesmo lugar ele passou de 2 min, e com o feed de posts
+  // (mais uma rota e mais uma action pra compilar) encostou nos 3.
+  timeout: 240_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,

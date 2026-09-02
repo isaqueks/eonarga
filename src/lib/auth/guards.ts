@@ -2,11 +2,18 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { eq } from "drizzle-orm";
+
 import {
   getSessionTokenFromCookie,
   validateSessionToken,
   type SessionWithUser,
 } from "@/lib/auth/session";
+import { db } from "@/lib/db/client";
+import { users } from "@/lib/db/schema";
+
+/** "Visto por último" só é regravado depois desse intervalo, senão vira um UPDATE por request. */
+const LAST_SEEN_THROTTLE_MS = 5 * 60_000;
 
 /**
  * Sessão do request atual, ou null. `cache()` garante uma consulta só por request,
@@ -15,8 +22,23 @@ import {
 export const getCurrentUser = cache(async (): Promise<SessionWithUser | null> => {
   const token = await getSessionTokenFromCookie();
   if (!token) return null;
-  return validateSessionToken(token);
+  const current = await validateSessionToken(token);
+  if (current) await touchLastSeen(current);
+  return current;
 });
+
+/** Marca a pessoa como vista agora, se a última marca já tem mais de 5 minutos. */
+async function touchLastSeen(current: SessionWithUser): Promise<void> {
+  const last = current.user.lastSeenAt ? Date.parse(current.user.lastSeenAt) : 0;
+  if (Number.isFinite(last) && Date.now() - last < LAST_SEEN_THROTTLE_MS) return;
+  const now = new Date().toISOString();
+  try {
+    await db.update(users).set({ lastSeenAt: now }).where(eq(users.id, current.user.id));
+    current.user.lastSeenAt = now;
+  } catch {
+    // Só informativo: falhar aqui não pode derrubar a página.
+  }
+}
 
 /** `/login?next=<path atual>`, usando o `x-pathname` que o proxy injeta. */
 async function loginUrl(): Promise<string> {

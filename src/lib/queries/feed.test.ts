@@ -36,6 +36,8 @@ const T = {
   chamada: "2026-08-10T10:00:00.000Z",
   chamadaMorto: "2026-08-11T10:00:00.000Z",
   aviso: "2026-08-12T10:00:00.000Z",
+  postFoto: "2026-08-03T12:00:00.000Z",
+  postSebo: "2026-08-09T12:00:00.000Z",
 };
 
 beforeAll(async () => {
@@ -111,6 +113,8 @@ beforeAll(async () => {
       userId: ANA.id,
       rating: 9,
       verdict: "Achei um Bukowski",
+      contentHtml: "<p>Achei um <strong>Bukowski</strong> por cinco reais.</p>",
+      visitedAt: "2026-07-30",
       createdAt: T.notaAna,
       updatedAt: T.notaAna,
     },
@@ -143,6 +147,34 @@ beforeAll(async () => {
   await db.insert(schema.reviewReactions).values([
     { reviewId: "rev-ana", userId: CADU.id, emoji: "🔥", createdAt: T.reacao },
     { reviewId: "rev-morto", userId: ANA.id, emoji: "👍", createdAt: T.notaArquivada },
+  ]);
+
+  await db.insert(schema.posts).values([
+    {
+      id: "post-sebo",
+      userId: ANA.id,
+      body: "Tô aqui e tem narga",
+      placeId: SEBO,
+      lat: -27.59,
+      lng: -48.54,
+      address: null,
+      createdAt: T.postSebo,
+      updatedAt: T.postSebo,
+    },
+    // Só foto, sem lugar cadastrado: a localização é a coordenada + endereço.
+    {
+      id: "post-foto",
+      userId: BIA.id,
+      body: null,
+      photoId: "foto123456789012",
+      photoWidth: 240,
+      photoHeight: 180,
+      lat: -27.5975,
+      lng: -48.55,
+      address: "Rua Felipe Schmidt, 123 - Centro",
+      createdAt: T.postFoto,
+      updatedAt: T.postFoto,
+    },
   ]);
 
   await db.insert(schema.notifications).values([
@@ -191,17 +223,19 @@ afterAll(() => {
 });
 
 describe("listFeed", () => {
-  it("junta os cinco tipos de evento, do mais novo pro mais velho", async () => {
+  it("junta os seis tipos de evento, do mais novo pro mais velho", async () => {
     const events = await feed.listFeed();
 
     expect(events.map((e) => e.at)).toEqual([...events.map((e) => e.at)].sort().reverse());
     expect(events.map((e) => `${e.kind}@${e.at}`)).toEqual([
       `call@${T.chamada}`,
+      `post@${T.postSebo}`,
       `reaction@${T.reacao}`,
       `status@${T.jaFui}`,
       `status@${T.querIr}`,
       `review@${T.notaCadu}`,
       `review@${T.notaAna}`,
+      `post@${T.postFoto}`,
       `place@${T.barCriado}`,
       `place@${T.seboCriado}`,
     ]);
@@ -244,6 +278,63 @@ describe("listFeed", () => {
     });
   });
 
+  it("traz o texto puro e a data da visita na avaliação, pro card do feed", async () => {
+    const events = await feed.listFeed();
+    const review = events.find((e) => e.kind === "review" && e.reviewId === "rev-ana");
+
+    expect(review).toMatchObject({
+      kind: "review",
+      contentText: "Achei um Bukowski por cinco reais.",
+      visitedAt: "2026-07-30",
+    });
+  });
+
+  it("traz o post inteiro: autor, lugar, foto e localização", async () => {
+    const posts = (await feed.listFeed()).filter((e) => e.kind === "post");
+
+    expect(posts[0]).toMatchObject({
+      at: T.postSebo,
+      user: { id: ANA.id, name: "Ana" },
+      post: {
+        id: "post-sebo",
+        body: "Tô aqui e tem narga",
+        photo: null,
+        place: { id: SEBO, slug: "sebo-do-joao", name: "Sebo do João", emoji: "📚" },
+        author: { id: ANA.id, name: "Ana" },
+        canDelete: false,
+      },
+    });
+
+    expect(posts[1].post).toMatchObject({
+      id: "post-foto",
+      body: null,
+      place: null,
+      address: "Rua Felipe Schmidt, 123 - Centro",
+      photo: {
+        id: "foto123456789012",
+        url: "/api/uploads/foto123456789012",
+        thumbUrl: "/api/uploads/foto123456789012?v=thumb",
+        width: 240,
+        height: 180,
+      },
+    });
+  });
+
+  it("só deixa apagar o próprio post — admin apaga qualquer um", async () => {
+    const mine = (await feed.listFeed({ viewer: { id: ANA.id, role: "member" } })).filter(
+      (e) => e.kind === "post",
+    );
+    expect(mine.map((e) => [e.post.id, e.post.canDelete])).toEqual([
+      ["post-sebo", true],
+      ["post-foto", false],
+    ]);
+
+    const admin = (await feed.listFeed({ viewer: { id: CADU.id, role: "admin" } })).filter(
+      (e) => e.kind === "post",
+    );
+    expect(admin.every((e) => e.post.canDelete)).toBe(true);
+  });
+
   it("ignora o aviso do admin, que não é evento do grupo", async () => {
     const events = await feed.listFeed();
 
@@ -254,8 +345,9 @@ describe("listFeed", () => {
   it("ignora tudo que é de lugar arquivado", async () => {
     const events = await feed.listFeed();
 
-    expect(events.some((e) => e.place.slug === "lugar-morto")).toBe(false);
-    expect(events).toHaveLength(8);
+    // Post é da pessoa, não do lugar, e não tem `place` de evento: fica de fora da conta.
+    expect(events.some((e) => e.kind !== "post" && e.place.slug === "lugar-morto")).toBe(false);
+    expect(events).toHaveLength(10);
   });
 
   it("respeita o limite", async () => {
@@ -263,19 +355,23 @@ describe("listFeed", () => {
 
     expect(events).toHaveLength(3);
     expect(events[0].kind).toBe("call");
-    expect(events[2].at).toBe(T.jaFui);
+    expect(events[2].at).toBe(T.reacao);
   });
 
-  it("pagina com o cursor `before`", async () => {
+  it("pagina com o cursor `before`, com post entrando na conta", async () => {
     const primeira = await feed.listFeed({ limit: 3 });
-    const segunda = await feed.listFeed({ limit: 3, before: primeira[2].at });
+    expect(primeira.map((e) => e.at)).toEqual([T.chamada, T.postSebo, T.reacao]);
 
+    const segunda = await feed.listFeed({ limit: 3, before: primeira[2].at });
     expect(segunda).toHaveLength(3);
     expect(segunda.every((e) => e.at < primeira[2].at)).toBe(true);
-    expect(segunda.map((e) => e.at)).toEqual([T.querIr, T.notaCadu, T.notaAna]);
+    expect(segunda.map((e) => e.at)).toEqual([T.jaFui, T.querIr, T.notaCadu]);
 
     const terceira = await feed.listFeed({ limit: 3, before: segunda[2].at });
-    expect(terceira.map((e) => e.at)).toEqual([T.barCriado, T.seboCriado]);
+    expect(terceira.map((e) => e.at)).toEqual([T.notaAna, T.postFoto, T.barCriado]);
+
+    const quarta = await feed.listFeed({ limit: 3, before: terceira[2].at });
+    expect(quarta.map((e) => e.at)).toEqual([T.seboCriado]);
 
     expect(await feed.listFeed({ before: T.seboCriado })).toEqual([]);
   });

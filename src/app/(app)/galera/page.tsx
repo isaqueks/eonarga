@@ -76,7 +76,9 @@ export default async function GaleraPage() {
 
               <p className="text-muted-foreground truncate">{bio(person)}</p>
               <p className="text-foreground/80 tabular-nums">{counters(person)}</p>
-              <p className="text-muted-foreground text-xs">{lastSeen(person.lastLoginAt)}</p>
+              <p className="text-muted-foreground text-xs">
+                {lastSeen(person.lastSeenAt ?? person.lastLoginAt)}
+              </p>
             </div>
           </li>
         ))}

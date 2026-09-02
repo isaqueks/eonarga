@@ -17,6 +17,8 @@ export interface GaleraUser {
   /** Média das notas que a pessoa deu, em estrelas (1,0..5,0). Null se nunca avaliou. */
   avgStarsGiven: number | null;
   lastLoginAt: string | null;
+  /** Último uso do app (com folga de 5 min); null pra quem nunca entrou desde a coluna existir. */
+  lastSeenAt: string | null;
 }
 
 /**
@@ -35,6 +37,7 @@ export async function listGalera(): Promise<GaleraUser[]> {
       gender: users.gender,
       testosterone: users.testosterone,
       lastLoginAt: users.lastLoginAt,
+      lastSeenAt: users.lastSeenAt,
       // Lugar arquivado não conta: o placar é do que está no ar.
       placesCreated: sql<number>`(
         select count(*) from ${places}

@@ -389,6 +389,141 @@ test("link público do lugar abre pra quem não tem conta", async ({ page, brows
   await anon.close();
 });
 
+/**
+ * O "Onde" começa tentando o GPS (o contexto de teste responde a Praça XV). Se ele
+ * resolveu antes da gente, a tela já mostra o resumo: aí é o "Trocar" que reabre as
+ * três opções.
+ */
+async function abrirOnde(page: Page) {
+  const escolher = page.getByRole("button", { name: "Escolher lugar" });
+  const trocar = page.getByRole("button", { name: "Trocar" });
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (await escolher.isVisible().catch(() => false)) return;
+    if (await trocar.isVisible().catch(() => false)) {
+      await trocar.click();
+      continue;
+    }
+    // Ainda hidratando, ou o GPS ainda pensando.
+    await page.waitForTimeout(500);
+  }
+  await expect(escolher).toBeVisible();
+}
+
+test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
+  // O "Apagar" pede confirmação nativa.
+  page.on("dialog", (dialog) => void dialog.accept());
+  await login(page);
+
+  // A avaliação do fluxo anterior aparece no feed como card, não como linha solta.
+  await page.goto("/feed");
+  await expect(page.getByRole("heading", { name: "Novidades" })).toBeVisible();
+  const cardDaNota = page.locator("article").filter({ hasText: "Melhor sebo do Centro" });
+  await expect(cardDaNota).toContainText("Achei um Bukowski");
+  await expect(cardDaNota.getByRole("link", { name: /Sebo do João/ })).toHaveAttribute(
+    "href",
+    "/lugares/sebo-do-joao",
+  );
+  await shot(page, "19-feed-avaliacao");
+
+  // --- Post 1: lugar da lista + texto ---------------------------------------
+  await page.getByText("📸 Postar").click();
+  await expect(page).toHaveURL(/\/feed\/novo$/);
+
+  await abrirOnde(page);
+  await page.getByRole("button", { name: "Escolher lugar" }).click();
+  await page.getByRole("button", { name: /Sebo do João/ }).click();
+  await expect(page.getByRole("button", { name: "Trocar" })).toBeVisible();
+
+  await page.getByLabel("Texto do post").fill("Tô aqui e tem narga");
+  await shot(page, "20-postar-lugar");
+  const publicar = page.getByRole("button", { name: "Publicar" });
+  await expect(publicar).toBeEnabled();
+  await publicar.click();
+
+  await page.waitForURL(/\/feed$/);
+  const cardTexto = page.locator("article").filter({ hasText: "Tô aqui e tem narga" });
+  await expect(cardTexto).toBeVisible({ timeout: 30_000 });
+  await expect(cardTexto.getByRole("link", { name: /Sebo do João/ })).toBeVisible();
+
+  // --- Post 2: só foto, com a posição marcada no mapa -----------------------
+  await page.getByText("📸 Postar").click();
+  await expect(page).toHaveURL(/\/feed\/novo$/);
+
+  const fotoPost = await sharp({
+    create: { width: 200, height: 150, channels: 3, background: "#8fd3b0" },
+  })
+    .png()
+    .toBuffer();
+
+  // O input só reage depois da hidratação; se o primeiro `change` cair antes, repete.
+  const tirar = page.getByRole("button", { name: "Tirar" });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page
+      .locator('input[name="photo"]')
+      .setInputFiles({ name: "post.png", mimeType: "image/png", buffer: fotoPost });
+    try {
+      await expect(tirar).toBeVisible({ timeout: 5_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  await expect(tirar).toBeVisible();
+
+  await abrirOnde(page);
+  await page.getByRole("button", { name: "Marcar no mapa" }).click();
+  const picker = page.getByLabel("Escolher a posição no mapa");
+  await expect(picker).toBeVisible();
+  const publicar2 = page.getByRole("button", { name: "Publicar" });
+  // O pino nasce no centro e não repassa o clique pro mapa: clica longe dele.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const box = await picker.boundingBox();
+    if (!box) throw new Error("picker sem bounding box");
+    await picker.click({
+      position: { x: box.width / 2 + 70 + 15 * attempt, y: box.height / 2 + 50 - 15 * attempt },
+    });
+    try {
+      await expect(publicar2).toBeEnabled({ timeout: 3_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  await expect(publicar2).toBeEnabled();
+  await shot(page, "21-postar-foto");
+  await publicar2.click();
+
+  await page.waitForURL(/\/feed$/);
+  const foto = page.getByRole("img", { name: "Foto de Admin" }).first();
+  await expect(foto).toBeVisible({ timeout: 30_000 });
+  await expect(foto).toHaveAttribute("src", /\/api\/uploads\/[A-Za-z0-9_-]+/);
+
+  const cardFoto = page.locator("article").filter({ has: foto });
+  // Sem lugar cadastrado, a linha "de onde" leva pro Maps por coordenada.
+  await expect(cardFoto.locator('a[href^="https://www.google.com/maps/search/"]')).toBeVisible();
+  await shot(page, "22-feed-com-posts");
+
+  // --- Apagar o post da foto pelo menu "⋯" ----------------------------------
+  const apagar = page.getByRole("menuitem", { name: /Apagar/ });
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await cardFoto.getByRole("button", { name: "Mais ações do post" }).click();
+    try {
+      await expect(apagar).toBeVisible({ timeout: 2_000 });
+      break;
+    } catch {
+      await page.keyboard.press("Escape");
+    }
+  }
+  await apagar.click();
+
+  await expect(page.getByRole("img", { name: "Foto de Admin" })).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  // O post de texto continua lá.
+  await expect(page.getByText("Tô aqui e tem narga")).toBeVisible();
+});
+
 test("página offline é pública e tem a copy do cachorro", async ({ page }) => {
   await page.goto("/~offline");
   await expect(page.getByRole("heading", { name: "Sem internet." })).toBeVisible();

@@ -23,6 +23,8 @@ export const users = sqliteTable("users", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
   lastLoginAt: text("last_login_at"),
+  // "Visto por último": atualizado a cada uso (com folga de 5 min), não só no login.
+  lastSeenAt: text("last_seen_at"),
   // Id da foto de perfil no storage (src/lib/storage.ts). Null = iniciais.
   avatarId: text("avatar_id"),
   // Campos de zoeira do perfil (docs/08 #25). Admin escreve o que quiser; membro escolhe da lista.
@@ -248,12 +250,45 @@ export const notifications = sqliteTable(
   (t) => [index("notifications_created_idx").on(t.createdAt)],
 );
 
+/**
+ * Post do feed: foto e/ou texto, sempre com quem postou e de onde (docs/01 — Feed).
+ *
+ * `photo_id` é o id do storage (`src/lib/storage.ts`), sem FK: a imagem do post não é
+ * foto de lugar, então não entra em `photos` (que exige `place_id`). Quem apaga o post
+ * apaga o arquivo — ver `src/actions/posts.ts`.
+ *
+ * `lat/lng` são sempre gravados, mesmo com `place_id`: se o lugar for arquivado (ou
+ * o `place_id` virar null), o post continua sabendo de onde foi.
+ */
+export const posts = sqliteTable(
+  "posts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Texto puro com quebras de linha, no máximo POST_BODY_MAX (validado na action).
+    body: text("body"),
+    photoId: text("photo_id"),
+    photoWidth: integer("photo_width"),
+    photoHeight: integer("photo_height"),
+    placeId: text("place_id").references(() => places.id, { onDelete: "set null" }),
+    lat: real("lat").notNull(),
+    lng: real("lng").notNull(),
+    address: text("address"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("posts_created_idx").on(t.createdAt), index("posts_user_idx").on(t.userId)],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   places: many(places),
   reviews: many(reviews),
   statuses: many(userPlaceStatus),
   comments: many(reviewComments),
+  posts: many(posts),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -271,6 +306,7 @@ export const placesRelations = relations(places, ({ one, many }) => ({
   statuses: many(userPlaceStatus),
   photos: many(photos),
   tags: many(placeTags),
+  posts: many(posts),
 }));
 
 export const reviewsRelations = relations(reviews, ({ one, many }) => ({
@@ -301,6 +337,11 @@ export const placeTagsRelations = relations(placeTags, ({ one }) => ({
   creator: one(users, { fields: [placeTags.createdBy], references: [users.id] }),
 }));
 
+export const postsRelations = relations(posts, ({ one }) => ({
+  author: one(users, { fields: [posts.userId], references: [users.id] }),
+  place: one(places, { fields: [posts.placeId], references: [places.id] }),
+}));
+
 export const photosRelations = relations(photos, ({ one }) => ({
   place: one(places, { fields: [photos.placeId], references: [places.id] }),
   review: one(reviews, { fields: [photos.reviewId], references: [reviews.id] }),
@@ -321,3 +362,5 @@ export type Photo = typeof photos.$inferSelect;
 export type ReviewComment = typeof reviewComments.$inferSelect;
 export type NewReviewComment = typeof reviewComments.$inferInsert;
 export type PlaceTag = typeof placeTags.$inferSelect;
+export type Post = typeof posts.$inferSelect;
+export type NewPost = typeof posts.$inferInsert;

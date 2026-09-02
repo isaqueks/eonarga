@@ -184,6 +184,24 @@ Progresso visível ("1 de 3"). Voltar preserva o que foi digitado. Se o link nã
 - Ordenação padrão em "Quero ir": mais pessoas querendo primeiro. É a lista de candidatos pro próximo rolê.
 - Botão "🎲 Sortear" (v2): escolhe entre "quero ir" respeitando o chip de categoria, com animação rápida e "de novo".
 
+### Feed
+
+Ícone de atividade no header (`/feed`). Do topo pra baixo: título "Novidades", botão primário largo **"📸 Postar"** e a timeline.
+
+- **Post** (card): avatar + nome, "há 5 min", linha "📍 no **Sebo do João**" (link pra ficha) ou "📍 Rua Felipe Schmidt, 123 - Centro" (link pro Maps, aba nova); a foto em largura total, na proporção original, e o texto embaixo respeitando as quebras de linha. Tocar na foto abre em tela cheia. Menu "⋯" com "Apagar" (com confirmação) pra quem postou e pro admin.
+- **Avaliação** (card, mesmo peso visual): avatar + nome, "há x · visitou em 12/08", a mesma linha de localização, nargas + nota, o veredito em destaque e uma prévia do texto (~280 caracteres) com "… ver avaliação" levando pra ficha.
+- **O resto** (lugar novo, "quero ir"/"já fui", reação, "chamar galera") continua como linha curta com avatar pequeno.
+- "Carregar mais" pagina pelo `?before=` do último evento. Vazio: "Nada aconteceu ainda. / Vai lá fazer acontecer." — com o botão "Postar" ainda visível.
+
+### Postar
+
+Tela única (`/feed/novo`), tudo opcional menos o "onde":
+
+1. **📷 Foto** — abre a câmera traseira direto (`capture="environment"`). Escolheu, aparece a prévia com um "Tirar" pra desistir.
+2. **Texto** — "O que tá rolando?", cresce até ~6 linhas, contador `19/1000`.
+3. **Onde você tá?** — três botões: **Onde estou** (padrão, já pede o GPS ao abrir), **Escolher lugar** (busca por nome, ordenada por distância quando tem GPS) e **Marcar no mapa** (pino arrastável). Perto de um lugar cadastrado, o GPS pergunta "Você tá no **Sebo do João**?" com "Sim" / "Não, só o endereço". Escolhido, vira uma linha "📍 …" com "Trocar" do lado. Sem GPS: "Sem GPS. Escolhe o lugar ou marca no mapa."
+4. **Publicar** — desabilitado até ter o "onde" e pelo menos foto ou texto; embaixo, a explicação do que falta.
+
 ### Perfil
 
 - Nome (editável), email, gênero e testosterona (regras por papel no [08](./08-decisoes-em-aberto.md) #25), botão "Trocar senha", toggle de tema, "Sair".

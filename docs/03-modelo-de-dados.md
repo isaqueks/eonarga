@@ -17,6 +17,8 @@ erDiagram
   places ||--o{ photos : tem
   reviews ||--o{ review_reactions : recebe
   reviews ||--o{ photos : ilustra
+  users ||--o{ posts : postou
+  places ||--o{ posts : sedia
 ```
 
 ## Tabelas
@@ -126,6 +128,24 @@ PK `(review_id, user_id, emoji)`. Emojis permitidos: lista fixa no código (👍
 | created_at    | text            |                            |
 
 Arquivos em `UPLOAD_DIR/{id}.webp` e `{id}.thumb.webp`.
+
+### posts
+
+Post do feed (docs/01 — Feed): foto e/ou texto, sempre com quem postou e de onde.
+
+| coluna                    | tipo                 | notas                                                |
+| ------------------------- | -------------------- | ---------------------------------------------------- |
+| id                        | text pk              | `nanoid(12)`                                         |
+| user_id                   | fk users (cascade)   | quem postou                                          |
+| body                      | text null            | texto puro com quebras de linha, até 1000            |
+| photo_id                  | text null            | id da imagem no storage, **sem FK** (não é `photos`) |
+| photo_width, photo_height | int null             | dimensões da variante grande                         |
+| place_id                  | fk places (set null) | quando o post é de um lugar cadastrado               |
+| lat, lng                  | real                 | sempre gravadas, mesmo com `place_id`                |
+| address                   | text null            | do lugar, ou do reverse geocoding                    |
+| created_at, updated_at    | text                 |                                                      |
+
+Índices em `created_at` (a ordem do feed) e `user_id`. As regras "tem `body` **ou** `photo_id`" e "com `place_id`, `lat/lng` são os do lugar" ficam na action (`src/actions/posts.ts`), não no banco. A foto usa os mesmos arquivos do storage das outras (`{id}.webp` / `{id}.thumb.webp`) e é apagada junto com a linha.
 
 ## Ranking
 

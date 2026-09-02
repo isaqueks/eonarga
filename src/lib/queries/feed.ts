@@ -12,7 +12,9 @@ import {
   users,
 } from "@/lib/db/schema";
 import type { PersonRef } from "@/lib/queries/places";
+import { listPosts, type PostItem, type PostViewer } from "@/lib/queries/posts";
 import { ratingToStars } from "@/lib/ranking";
+import { htmlToText } from "@/lib/sanitize";
 
 export interface FeedPlaceRef {
   slug: string;
@@ -31,6 +33,10 @@ export type FeedEvent =
       stars: number;
       verdict: string;
       reviewId: string;
+      /** Texto da avaliação em texto puro, pra prévia no card do feed. */
+      contentText: string;
+      /** Data da visita (`YYYY-MM-DD`), quando a pessoa preencheu. */
+      visitedAt: string | null;
     }
   | { kind: "place"; at: string; user: PersonRef; place: FeedPlaceRef }
   | { kind: "status"; at: string; user: PersonRef; place: FeedPlaceRef; status: "want" | "visited" }
@@ -44,7 +50,9 @@ export type FeedEvent =
       reviewAuthor: string;
     }
   /** "Chamar galera pra cá" (src/actions/push.ts): fica no feed mesmo pra quem não usa push. */
-  | { kind: "call"; at: string; user: PersonRef; place: FeedPlaceRef };
+  | { kind: "call"; at: string; user: PersonRef; place: FeedPlaceRef }
+  /** Post do feed: foto e/ou texto, com quem postou e de onde (docs/01 — Feed). */
+  | { kind: "post"; at: string; user: PersonRef; post: PostItem };
 
 export const FEED_DEFAULT_LIMIT = 50;
 const FEED_MAX_LIMIT = 200;
@@ -53,6 +61,8 @@ export interface ListFeedOptions {
   limit?: number;
   /** Cursor ISO: só eventos mais antigos que isso ("carregar mais"). */
   before?: string;
+  /** Quem está olhando: define o "Apagar" dos posts. Sem viewer, ninguém apaga nada. */
+  viewer?: PostViewer | null;
 }
 
 /** Chave estável pro React e pra desempatar a ordenação. */
@@ -69,6 +79,8 @@ export function feedEventKey(event: FeedEvent): string {
     // A mesma pessoa chama o mesmo lugar mais de uma vez (em dias diferentes): entra a hora.
     case "call":
       return `call:${event.user.id}:${event.place.slug}:${event.at}`;
+    case "post":
+      return `post:${event.post.id}`;
   }
 }
 
@@ -96,9 +108,9 @@ function toPerson(row: PersonRow): PersonRef {
 }
 
 /**
- * Novidades do grupo: avaliação, lugar novo, "quero ir"/"já fui", reação e chamada.
+ * Novidades do grupo: post, avaliação, lugar novo, "quero ir"/"já fui", reação e chamada.
  *
- * São cinco queries independentes (uma por tipo), cada uma já limitada e
+ * São seis queries independentes (uma por tipo), cada uma já limitada e
  * ordenada no banco; o merge é em memória. Uma UNION daria a mesma coisa com
  * colunas que só existem pra um dos tipos — não compensa.
  *
@@ -116,7 +128,7 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
   const reactor = alias(users, "reactor");
   const reviewAuthor = alias(users, "review_author");
 
-  const [reviewRows, placeRows, statusRows, reactionRows, callRows] = await Promise.all([
+  const [reviewRows, placeRows, statusRows, reactionRows, callRows, postItems] = await Promise.all([
     db
       .select({
         ...person,
@@ -125,6 +137,8 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
         reviewId: reviews.id,
         rating: reviews.rating,
         verdict: reviews.verdict,
+        contentHtml: reviews.contentHtml,
+        visitedAt: reviews.visitedAt,
       })
       .from(reviews)
       .innerJoin(users, eq(users.id, reviews.userId))
@@ -195,6 +209,9 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
       )
       .orderBy(desc(notifications.createdAt))
       .limit(limit),
+
+    // Post não depende de lugar: quem posta sempre manda a coordenada junto.
+    listPosts(opts.viewer ?? null, { limit, before }),
   ]);
 
   const events: FeedEvent[] = [
@@ -206,6 +223,8 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
       stars: ratingToStars(row.rating),
       verdict: row.verdict,
       reviewId: row.reviewId,
+      contentText: htmlToText(row.contentHtml),
+      visitedAt: row.visitedAt,
     })),
     ...placeRows.map((row): FeedEvent => ({
       kind: "place",
@@ -233,6 +252,12 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
       at: row.at,
       user: toPerson(row),
       place: toPlace(row),
+    })),
+    ...postItems.map((post): FeedEvent => ({
+      kind: "post",
+      at: post.createdAt,
+      user: post.author,
+      post,
     })),
   ];
 

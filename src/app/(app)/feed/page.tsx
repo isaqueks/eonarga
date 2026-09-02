@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/empty-state";
+import { PostCard } from "@/components/posts/post-card";
+import { ReviewFeedCard } from "@/components/posts/review-feed-card";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import { requireUser } from "@/lib/auth/guards";
 import { relativeFromNow } from "@/lib/dates";
-import { formatStars } from "@/lib/format";
-import { feedEventKey, listFeed, type FeedEvent } from "@/lib/queries/feed";
+import { feedEventKey, listFeed, type FeedEvent, type FeedPlaceRef } from "@/lib/queries/feed";
 
 export const metadata: Metadata = { title: "Novidades" };
 
@@ -16,12 +17,19 @@ export const dynamic = "force-dynamic";
 /** Quantos eventos por página. O "carregar mais" leva o `at` do último no `?before=`. */
 const PAGE_SIZE = 30;
 
+/** Eventos que continuam sendo uma linha curta; post e avaliação viram card. */
+type LineEvent = Exclude<FeedEvent, { kind: "post" | "review" }>;
+
 export default async function FeedPage({ searchParams }: PageProps<"/feed">) {
-  await requireUser();
+  const { user } = await requireUser();
   const params = await searchParams;
   const before = typeof params.before === "string" ? params.before : undefined;
 
-  const events = await listFeed({ limit: PAGE_SIZE, before });
+  const events = await listFeed({
+    limit: PAGE_SIZE,
+    before,
+    viewer: { id: user.id, role: user.role },
+  });
   const last = events.at(-1);
   const hasMore = events.length === PAGE_SIZE && last;
 
@@ -35,6 +43,15 @@ export default async function FeedPage({ searchParams }: PageProps<"/feed">) {
           </Link>
         ) : null}
       </header>
+
+      <Button
+        size="lg"
+        className="h-12 w-full text-base"
+        nativeButton={false}
+        render={<Link href="/feed/novo" />}
+      >
+        📸 Postar
+      </Button>
 
       {events.length === 0 ? (
         before ? (
@@ -56,22 +73,39 @@ export default async function FeedPage({ searchParams }: PageProps<"/feed">) {
         )
       ) : (
         <ul className="flex flex-col">
-          {events.map((event) => (
-            <li
-              key={feedEventKey(event)}
-              className="border-border flex gap-3 border-b py-3 last:border-b-0"
-            >
-              <UserAvatar name={event.user.name} avatarId={event.user.avatarId} size="sm" />
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <p className="text-sm leading-5 text-pretty">
-                  <EventText event={event} />
-                </p>
-                <time dateTime={event.at} className="text-muted-foreground text-xs">
-                  {relativeFromNow(event.at)}
-                </time>
-              </div>
-            </li>
-          ))}
+          {events.map((event) => {
+            const key = feedEventKey(event);
+
+            if (event.kind === "post") {
+              return (
+                <li key={key} className="py-1.5">
+                  <PostCard post={event.post} />
+                </li>
+              );
+            }
+
+            if (event.kind === "review") {
+              return (
+                <li key={key} className="py-1.5">
+                  <ReviewFeedCard review={event} />
+                </li>
+              );
+            }
+
+            return (
+              <li key={key} className="border-border flex gap-3 border-b py-3 last:border-b-0">
+                <UserAvatar name={event.user.name} avatarId={event.user.avatarId} size="sm" />
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <p className="text-sm leading-5 text-pretty">
+                    <EventText event={event} />
+                  </p>
+                  <time dateTime={event.at} className="text-muted-foreground text-xs">
+                    {relativeFromNow(event.at)}
+                  </time>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -91,7 +125,7 @@ export default async function FeedPage({ searchParams }: PageProps<"/feed">) {
 }
 
 /** Nome do lugar com o emoji da categoria, linkando pra ficha. */
-function PlaceLink({ place }: { place: FeedEvent["place"] }) {
+function PlaceLink({ place }: { place: FeedPlaceRef }) {
   return (
     <Link href={`/lugares/${place.slug}`} className="font-semibold hover:underline">
       <span aria-hidden>{place.emoji} </span>
@@ -104,17 +138,8 @@ function Who({ name }: { name: string }) {
   return <span className="font-semibold">{name}</span>;
 }
 
-function EventText({ event }: { event: FeedEvent }) {
+function EventText({ event }: { event: LineEvent }) {
   switch (event.kind) {
-    case "review":
-      return (
-        <>
-          <Who name={event.user.name} /> deu {formatStars(event.stars)} nargas pro{" "}
-          <PlaceLink place={event.place} />:{" "}
-          <span className="text-muted-foreground italic">“{event.verdict}”</span>
-        </>
-      );
-
     case "place":
       return (
         <>
