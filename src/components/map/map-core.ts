@@ -34,6 +34,9 @@ export function createTileLayer(): L.TileLayer {
   return L.tileLayer(TILE_URL, {
     attribution: TILE_ATTRIBUTION,
     maxZoom: 19,
+    // CORS de propósito (o OSM responde `access-control-allow-origin: *`): assim o
+    // service worker consegue ler o tile e guardar com carimbo de data (sw.js).
+    // O host precisa estar no `connect-src` da CSP, porque o worker busca via fetch.
     crossOrigin: true,
   });
 }

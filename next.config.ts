@@ -70,7 +70,8 @@ function securityHeaders() {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://tile.openstreetmap.org",
     "font-src 'self' data:",
-    `connect-src 'self'${dev ? " ws: wss:" : ""} https://cloudflareinsights.com`,
+    // A CSP também vale pro /sw.js, e lá o fetch dos tiles é `connect-src`, não `img-src`.
+    `connect-src 'self'${dev ? " ws: wss:" : ""} https://tile.openstreetmap.org https://cloudflareinsights.com`,
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "media-src 'self'",
