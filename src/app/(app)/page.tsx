@@ -4,10 +4,16 @@ import { EmptyState } from "@/components/empty-state";
 import { CategoryChips } from "@/components/places/category-chips";
 import { InstallBanner } from "@/components/pwa/install-banner";
 import { RankingControls } from "@/components/places/ranking-controls";
+import { TagChips, TOP_TAGS } from "@/components/places/tag-chips";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/guards";
 import { listCategories } from "@/lib/queries/categories";
-import { getGlobalRatingStats, listPlaces, type PlaceListItem } from "@/lib/queries/places";
+import {
+  getGlobalRatingStats,
+  listPlaces,
+  listTagsWithCounts,
+  type PlaceListItem,
+} from "@/lib/queries/places";
 import { globalMean, parseRankingSort, rank, type Ranked, type RankingSort } from "@/lib/ranking";
 
 import { RankingList, type RankedPlace } from "./ranking-list";
@@ -59,15 +65,17 @@ export default async function RankingPage({ searchParams }: PageProps<"/">) {
   const { user } = await requireUser();
   const params = await searchParams;
   const cat = typeof params.cat === "string" ? params.cat : undefined;
+  const tag = typeof params.tag === "string" ? params.tag : undefined;
 
   const sort = parseRankingSort(params.sort);
   const onlyNarga = params.narga === "1";
   const visitedFilter = params.fui === "1" ? "yes" : params.fui === "0" ? "no" : null;
 
-  const [categories, places, stats] = await Promise.all([
+  const [categories, places, stats, tags] = await Promise.all([
     listCategories(),
-    listPlaces({ userId: user.id, categorySlug: cat }),
+    listPlaces({ userId: user.id, categorySlug: cat, tag }),
     getGlobalRatingStats(),
+    listTagsWithCounts(),
   ]);
 
   const filtered = places.filter((place) => {
@@ -95,12 +103,19 @@ export default async function RankingPage({ searchParams }: PageProps<"/">) {
   );
 
   const unrated = filtered.filter((place) => place.reviewCount === 0);
-  const nothingAtAll = places.length === 0;
+  // Com filtro de tag na URL, a lista já vem cortada: "nenhum lugar ainda" só vale sem filtro.
+  const nothingAtAll = places.length === 0 && !tag;
   const nothingWithFilter = filtered.length === 0;
 
   return (
     <div className="flex flex-1 flex-col gap-3 p-4">
       <CategoryChips categories={categories} />
+      <TagChips
+        tags={tags.slice(0, TOP_TAGS)}
+        activeTag={tag ?? null}
+        params={params}
+        basePath="/"
+      />
       <InstallBanner />
       {nothingAtAll ? null : <RankingControls />}
 

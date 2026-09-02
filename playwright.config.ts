@@ -55,6 +55,9 @@ export default defineConfig({
       ...process.env,
       DATABASE_URL: "file:./data/e2e.db",
       NEXT_PUBLIC_CAPTCHA_MODE: "always",
+      APP_URL: BASE_URL,
+      // Liga o link público (src/lib/share.ts) sem depender do .env da máquina.
+      APP_SECRET: "e2e-nao-use-isso-em-producao",
       ADMIN_NAME: "Admin",
       ADMIN_EMAIL: E2E_ADMIN.email,
       ADMIN_PASSWORD: E2E_ADMIN.password,

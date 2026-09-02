@@ -15,6 +15,17 @@ export type TempPasswordState = FormState & {
   email?: string;
 };
 
+/** Relatório da importação em massa de lugares (`/admin/importar`). */
+export type ImportReport = {
+  /** Nomes dos lugares criados. */
+  created: string[];
+  /** Nomes (ou links) que já existiam. */
+  skipped: string[];
+  failed: { line: string; reason: string }[];
+};
+
+export type ImportState = FormState & { report?: ImportReport };
+
 export const EMPTY_FORM_STATE: FormState = { ok: false };
 
 /** Primeira mensagem de cada campo, no formato que os formulários esperam. */

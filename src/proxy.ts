@@ -22,7 +22,9 @@ const PUBLIC_PATHS = new Set([
 
 // /api/ passa direto: cada route handler checa a sessão e responde 401 em JSON,
 // que é o que um fetch do cliente espera (redirect pra HTML de login só confunde).
-const PUBLIC_PREFIXES = ["/icons/", "/captcha/", "/_next/", "/api/"];
+// /p/ e /api/p/ são o recorte público de um lugar: a autorização ali é o token
+// assinado na URL (src/lib/share.ts), não o cookie.
+const PUBLIC_PREFIXES = ["/icons/", "/captcha/", "/_next/", "/api/", "/p/", "/api/p/"];
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;

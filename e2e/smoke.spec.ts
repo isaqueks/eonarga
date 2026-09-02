@@ -229,17 +229,54 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   })
     .png()
     .toBuffer();
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({ name: "foto.png", mimeType: "image/png", buffer: png });
-  await expect(page.locator('img[alt="Admin"]').first()).toHaveAttribute(
-    "src",
-    /\/api\/uploads\/[A-Za-z0-9_-]+/,
-    { timeout: 30_000 },
-  );
+  await page.waitForLoadState("networkidle");
+  const avatarImg = page.locator('img[alt="Admin"]').first();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles({ name: "foto.png", mimeType: "image/png", buffer: png });
+    try {
+      await expect(avatarImg).toHaveAttribute("src", /\/api\/uploads\/[A-Za-z0-9_-]+/, {
+        timeout: 20_000,
+      });
+      break;
+    } catch {
+      // hidratação ainda não tinha ligado o input: repete
+    }
+  }
+  await expect(avatarImg).toHaveAttribute("src", /\/api\/uploads\/[A-Za-z0-9_-]+/);
   // "Minhas avaliações" lista o lugar avaliado com link pra ficha.
   await expect(page.getByText("Minhas avaliações")).toBeVisible();
   await expect(page.getByRole("link", { name: /Sebo do João/ })).toBeVisible();
+
+  // Foto do lugar: manda pela ficha e confere a thumb na grade.
+  await page.goto("/lugares/sebo-do-joao");
+  await expect(page.getByRole("heading", { name: /^Fotos \(0\)$/ })).toBeVisible();
+  await expect(page.getByText("Sem fotos. Alguém tira uma?")).toBeVisible();
+  const fotoLugar = await sharp({
+    create: { width: 240, height: 180, channels: 3, background: "#3a7d5c" },
+  })
+    .png()
+    .toBuffer();
+  // O input escondido só dispara o envio depois da hidratação; se o primeiro `change`
+  // cair antes disso, tenta de novo.
+  await page.waitForLoadState("networkidle");
+  const fotosUm = page.getByRole("heading", { name: /^Fotos \(1\)$/ });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page
+      .locator('input[type="file"][name="photo"]')
+      .setInputFiles({ name: "lugar.png", mimeType: "image/png", buffer: fotoLugar });
+    try {
+      await expect(fotosUm).toBeVisible({ timeout: 20_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  await expect(fotosUm).toBeVisible();
+  const thumb = page.locator('img[alt="Foto de Admin"]').first();
+  await expect(thumb).toHaveAttribute("src", /\/api\/uploads\/[A-Za-z0-9_-]+\?v=thumb/);
+  await shot(page, "14c-ficha-fotos");
 
   // Perfil e sair
   await page.goto("/perfil");
@@ -274,6 +311,52 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await page.goto("/perfil");
   await page.getByRole("button", { name: "Sair" }).click();
   await page.waitForURL(/\/login/);
+});
+
+test("link público do lugar abre pra quem não tem conta", async ({ page, browser }) => {
+  await login(page);
+  await page.goto("/lugares/sebo-do-joao");
+
+  // O menu só responde depois da hidratação; repete o clique até ele abrir.
+  const copiar = page.getByRole("menuitem", { name: /Copiar link público/ });
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await page.getByRole("button", { name: "Mais ações" }).click();
+    try {
+      await expect(copiar).toBeVisible({ timeout: 2_000 });
+      break;
+    } catch {
+      await page.keyboard.press("Escape");
+    }
+  }
+  await expect(copiar).toBeVisible();
+  // O href do menu: o botão copia isso pra área de transferência.
+  const shareUrl = await copiar.getAttribute("data-share-url");
+  expect(shareUrl).toBeTruthy();
+  await copiar.click();
+  await expect(page.getByText("Copiado!")).toBeVisible();
+
+  // O APP_URL do servidor pode apontar pra outra porta; o que importa é o caminho + token.
+  const origin = new URL(page.url()).origin;
+  const parsed = new URL(shareUrl!, origin);
+  const publicUrl = `${origin}${parsed.pathname}${parsed.search}`;
+
+  // Contexto novo = sem cookie de sessão: é o amigo de fora abrindo o link.
+  const anon = await browser.newContext();
+  const anonPage = await anon.newPage();
+  const response = await anonPage.goto(publicUrl);
+  expect(response?.status()).toBe(200);
+  await expect(anonPage.getByRole("heading", { name: /Sebo do João/ })).toBeVisible();
+  await expect(anonPage.getByText(/o app é fechado, mas esse lugar é público/)).toBeVisible();
+  await expect(anonPage.getByText("Melhor sebo do Centro, sem discussão")).toBeVisible();
+  // Só o primeiro nome de quem avaliou, e nada de status de ninguém.
+  await expect(anonPage.getByText(/Já foram:/)).toHaveCount(0);
+  await shot(anonPage, "18-link-publico");
+
+  // Sem token não tem página.
+  const semToken = await anonPage.goto(`${origin}/p/sebo-do-joao`);
+  expect(semToken?.status()).toBe(404);
+
+  await anon.close();
 });
 
 test("página offline é pública e tem a copy do cachorro", async ({ page }) => {

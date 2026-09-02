@@ -10,6 +10,9 @@ import { HasNargaBadge } from "./has-narga-badge";
 import { PriceLevel } from "./price-level";
 import { ApprovedBadge, FewRatingsBadge } from "./rating-badges";
 
+/** Quantas tags cabem no card sem virar sopa de letrinha. */
+const MAX_TAGS = 3;
+
 export function PlaceCard({
   place,
   position,
@@ -70,6 +73,20 @@ export function PlaceCard({
         {place.approved ? <ApprovedBadge className="self-start" /> : null}
 
         {address ? <p className="text-muted-foreground truncate text-xs">{address}</p> : null}
+
+        {place.tags.length > 0 ? (
+          // Span, não link: o card inteiro já é um <a> e âncora dentro de âncora não vale.
+          <ul className="flex flex-wrap gap-1">
+            {place.tags.slice(0, MAX_TAGS).map((tag) => (
+              <li
+                key={tag}
+                className="border-border/70 text-muted-foreground/90 rounded-full border px-2 py-0.5 text-[0.6875rem] leading-4"
+              >
+                #{tag}
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         {place.latestVerdict ? (
           <blockquote className="border-narga/60 text-muted-foreground border-l-2 pl-2 text-xs">

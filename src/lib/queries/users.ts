@@ -14,6 +14,8 @@ export interface GaleraUser {
   reviewCount: number;
   wantCount: number;
   visitedCount: number;
+  /** Média das notas que a pessoa deu, em estrelas (1,0..5,0). Null se nunca avaliou. */
+  avgStarsGiven: number | null;
   lastLoginAt: string | null;
 }
 
@@ -49,6 +51,10 @@ export async function listGalera(): Promise<GaleraUser[]> {
         select count(*) from ${userPlaceStatus}
         where ${userPlaceStatus.userId} = ${users.id} and ${userPlaceStatus.status} = 'visited'
       )`.as("visited_count"),
+      // rating é 2..10 (meios pontos); estrelas = rating / 2. Null pra quem nunca avaliou.
+      avgStarsGiven: sql<number | null>`(
+        select avg(${reviews.rating}) / 2.0 from ${reviews} where ${reviews.userId} = ${users.id}
+      )`.as("avg_stars_given"),
     })
     .from(users)
     .where(eq(users.isActive, true))
@@ -60,5 +66,6 @@ export async function listGalera(): Promise<GaleraUser[]> {
     reviewCount: Number(row.reviewCount),
     wantCount: Number(row.wantCount),
     visitedCount: Number(row.visitedCount),
+    avgStarsGiven: row.avgStarsGiven === null ? null : Number(row.avgStarsGiven),
   }));
 }

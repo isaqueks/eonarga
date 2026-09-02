@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 import { NargaStars } from "./narga-stars";
 import { ReactionBar } from "./reaction-bar";
+import { ReviewComments, type CommentView } from "./review-comments";
 import { ReviewContent } from "./review-content";
 import { ReviewMenu } from "./review-menu";
 
@@ -29,6 +30,15 @@ export function ReviewCard({
 }) {
   const when = relativeFromNow(review.updatedAt);
   const visited = review.visitedAt ? formatDayMonth(review.visitedAt) : null;
+  // O "há x" de cada resposta sai daqui, do servidor, pelo mesmo motivo do de cima.
+  const comments: CommentView[] = review.comments.map((comment) => ({
+    id: comment.id,
+    body: comment.body,
+    when: relativeFromNow(comment.createdAt),
+    authorName: comment.author.name,
+    authorAvatarId: comment.author.avatarId,
+    canDelete: comment.canDelete,
+  }));
 
   return (
     <article
@@ -66,6 +76,13 @@ export function ReviewCard({
       <ReviewContent html={review.contentHtml} />
 
       <ReactionBar reviewId={review.id} reactions={review.reactions} className="pt-1" />
+
+      <ReviewComments
+        reviewId={review.id}
+        comments={comments}
+        canReply={canEdit}
+        className="border-border/60 border-t pt-2"
+      />
     </article>
   );
 }

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/admin/usuarios", label: "Usuários" },
   { href: "/admin/categorias", label: "Categorias" },
+  { href: "/admin/importar", label: "Importar" },
 ] as const;
 
 export function AdminSubNav() {

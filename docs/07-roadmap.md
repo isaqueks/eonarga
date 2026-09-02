@@ -98,17 +98,17 @@ Fases curtas, cada uma termina com algo usável. A ordem é a dependência real:
 - [ ] Backup diário (Litestream ou cron) + restore testado
 - [ ] Criar contas da galera, mandar link no grupo
 
-## Fase 6 — v2 (por demanda)
+## Fase 6 — v2
 
-Ordem sugerida por custo/benefício:
+Feita em 02/09/2026, na ordem de custo/benefício:
 
-1. Sortear rolê
-2. Fotos
-3. Feed + placar
-4. Respostas em avaliações
-5. Tags livres
-6. Exportar JSON / importar Takeout
-7. Link público somente leitura
+1. [x] Sortear rolê (roleta na aba "Quero ir", respeita categoria e "só eu")
+2. [x] Fotos de lugar (upload com câmera, galeria com lightbox, apagar dono/admin, 30 por lugar)
+3. [x] Feed (`/feed`: notas, lugares, status e reações) + placar na galera (mais avaliou, mais cadastrou, mais rodado, crítico mais chato)
+4. [x] Respostas em avaliações (thread curta, apaga autor/autor da nota/admin)
+5. [x] Tags livres (até 8 por lugar, qualquer membro edita, filtro `?tag=` no ranking, mapa e rolê)
+6. [x] Exportar JSON (`/api/admin/export`) / importar links do Maps ou CSV do Takeout (`/admin/importar`)
+7. [x] Link público somente leitura (`/p/<slug>?t=<token>`, HMAC com `APP_SECRET`; sem a variável o recurso some)
 
 ## Definição de pronto (qualquer tarefa)
 

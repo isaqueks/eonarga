@@ -7,7 +7,10 @@ import { PlacesMapLazy } from "@/components/map/places-map-lazy";
 import { PeopleList } from "@/components/people-list";
 import { HasNargaBadge } from "@/components/places/has-narga-badge";
 import { MapsButtons } from "@/components/places/maps-buttons";
+import { PlacePhotos } from "@/components/places/place-photos";
+import { PlaceTags } from "@/components/places/place-tags";
 import { PriceLevel } from "@/components/places/price-level";
+import { TOP_TAGS } from "@/components/places/tag-chips";
 import { ApprovedBadge, FewRatingsBadge } from "@/components/places/rating-badges";
 import { StatusButtons } from "@/components/places/status-buttons";
 import { NargaStars } from "@/components/reviews/narga-stars";
@@ -16,8 +19,9 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { requireUser } from "@/lib/auth/guards";
 import { formatReviewCount, formatStars, instagramHandle } from "@/lib/format";
-import { getPlaceBySlug } from "@/lib/queries/places";
+import { getPlaceBySlug, listTagsWithCounts } from "@/lib/queries/places";
 import { getReviewsForPlace } from "@/lib/queries/reviews";
+import { shareUrlFor } from "@/lib/share";
 
 import { PlaceActions, UnarchiveButton } from "./place-actions";
 
@@ -36,10 +40,20 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
   const place = await getPlaceBySlug(slug, user.id);
   if (!place) notFound();
 
-  const reviews = await getReviewsForPlace(place.id, { id: user.id, role: user.role });
+  const [reviews, topTags] = await Promise.all([
+    getReviewsForPlace(place.id, { id: user.id, role: user.role }),
+    listTagsWithCounts(),
+  ]);
   const myReview = reviews.find((review) => review.author.id === user.id) ?? null;
+  // Sugestões do "+ tag": as mais usadas no grupo, fora as que o lugar já tem.
+  const tagSuggestions = topTags
+    .map((t) => t.tag)
+    .filter((t) => !place.tags.includes(t))
+    .slice(0, TOP_TAGS);
   const isOwnerOrAdmin = place.createdBy.id === user.id || user.role === "admin";
   const instagram = instagramHandle(place.instagram);
+  // `null` quando não tem APP_SECRET no ambiente: aí o recurso nem aparece no menu.
+  const shareUrl = shareUrlFor(place.slug, place.id);
 
   return (
     <article className="flex flex-col gap-4 p-4">
@@ -60,6 +74,7 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
           name={place.name}
           canArchive={isOwnerOrAdmin}
           archived={place.status === "archived"}
+          shareUrl={shareUrl}
         />
       </header>
 
@@ -89,6 +104,12 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
           <span aria-hidden>·</span>
           <HasNargaBadge value={place.hasNarga} short />
         </p>
+        <PlaceTags
+          placeId={place.id}
+          tags={place.tags}
+          canEdit={place.status === "active"}
+          suggestions={tagSuggestions}
+        />
       </div>
 
       {place.meanStars !== null ? (
@@ -157,6 +178,14 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
           className="h-full w-full"
         />
       </div>
+
+      <Separator />
+
+      <PlacePhotos
+        placeId={place.id}
+        viewer={{ id: user.id, role: user.role }}
+        canUpload={place.status === "active"}
+      />
 
       <Separator />
 

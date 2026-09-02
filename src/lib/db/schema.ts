@@ -153,6 +153,48 @@ export const reviewReactions = sqliteTable(
   (t) => [primaryKey({ columns: [t.reviewId, t.userId, t.emoji] })],
 );
 
+/**
+ * Respostas numa avaliação: thread curta, sem aninhamento (docs/01 — v2).
+ * Some junto com a avaliação e com quem escreveu.
+ */
+export const reviewComments = sqliteTable(
+  "review_comments",
+  {
+    id: text("id").primaryKey(),
+    reviewId: text("review_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Texto puro, no máximo COMMENT_MAX caracteres (validado na action).
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("review_comments_review_idx").on(t.reviewId)],
+);
+
+/**
+ * Tags livres do lugar ("aceita pix", "fecha cedo"). A tag já entra normalizada
+ * (minúscula, sem acento, só [a-z0-9 ]) — ver src/lib/tags.ts —, então a PK
+ * composta já serve de dedupe e o índice em `tag` serve pro filtro do ranking.
+ */
+export const placeTags = sqliteTable(
+  "place_tags",
+  {
+    placeId: text("place_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.placeId, t.tag] }), index("place_tags_tag_idx").on(t.tag)],
+);
+
 // v2, mas já modelado pra não precisar de migration depois.
 export const photos = sqliteTable(
   "photos",
@@ -177,6 +219,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   places: many(places),
   reviews: many(reviews),
   statuses: many(userPlaceStatus),
+  comments: many(reviewComments),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -193,6 +236,7 @@ export const placesRelations = relations(places, ({ one, many }) => ({
   reviews: many(reviews),
   statuses: many(userPlaceStatus),
   photos: many(photos),
+  tags: many(placeTags),
 }));
 
 export const reviewsRelations = relations(reviews, ({ one, many }) => ({
@@ -200,6 +244,7 @@ export const reviewsRelations = relations(reviews, ({ one, many }) => ({
   author: one(users, { fields: [reviews.userId], references: [users.id] }),
   reactions: many(reviewReactions),
   photos: many(photos),
+  comments: many(reviewComments),
 }));
 
 export const userPlaceStatusRelations = relations(userPlaceStatus, ({ one }) => ({
@@ -210,6 +255,16 @@ export const userPlaceStatusRelations = relations(userPlaceStatus, ({ one }) => 
 export const reviewReactionsRelations = relations(reviewReactions, ({ one }) => ({
   review: one(reviews, { fields: [reviewReactions.reviewId], references: [reviews.id] }),
   user: one(users, { fields: [reviewReactions.userId], references: [users.id] }),
+}));
+
+export const reviewCommentsRelations = relations(reviewComments, ({ one }) => ({
+  review: one(reviews, { fields: [reviewComments.reviewId], references: [reviews.id] }),
+  author: one(users, { fields: [reviewComments.userId], references: [users.id] }),
+}));
+
+export const placeTagsRelations = relations(placeTags, ({ one }) => ({
+  place: one(places, { fields: [placeTags.placeId], references: [places.id] }),
+  creator: one(users, { fields: [placeTags.createdBy], references: [users.id] }),
 }));
 
 export const photosRelations = relations(photos, ({ one }) => ({
@@ -229,3 +284,6 @@ export type NewReview = typeof reviews.$inferInsert;
 export type UserPlaceStatus = typeof userPlaceStatus.$inferSelect;
 export type ReviewReaction = typeof reviewReactions.$inferSelect;
 export type Photo = typeof photos.$inferSelect;
+export type ReviewComment = typeof reviewComments.$inferSelect;
+export type NewReviewComment = typeof reviewComments.$inferInsert;
+export type PlaceTag = typeof placeTags.$inferSelect;

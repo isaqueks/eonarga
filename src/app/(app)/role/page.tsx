@@ -6,12 +6,12 @@ import { CategoryChips } from "@/components/places/category-chips";
 import { PlaceCard } from "@/components/places/place-card";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/guards";
-import { formatNames } from "@/lib/format";
+import { formatNames, shortAddress } from "@/lib/format";
 import { listCategories } from "@/lib/queries/categories";
 import { listPlaces, type PlaceListItem } from "@/lib/queries/places";
 import { cn } from "@/lib/utils";
 
-import { SortearButton } from "./sortear-button";
+import { SortearButton, type SorteioCandidate } from "./sortear-button";
 
 export const metadata: Metadata = { title: "Rolê" };
 
@@ -27,39 +27,23 @@ function buildHref(base: URLSearchParams, patch: Record<string, string | null>) 
   return query ? `/role?${query}` : "/role";
 }
 
-function peopleNote(place: PlaceListItem, tab: Tab) {
+function peopleLine(place: PlaceListItem, tab: Tab): string | null {
   const people = tab === "want" ? place.wantUsers : place.visitedUsers;
   if (people.length === 0) return null;
   const names = formatNames(people.map((u) => u.name));
-  const verb = tab === "want" ? (people.length === 1 ? "quer ir" : "querem ir") : "já";
-  const suffix = tab === "want" ? "" : people.length === 1 ? " foi" : " foram";
-  return (
-    <p className="text-narga text-xs font-medium">
-      {names} {verb}
-      {suffix}
-    </p>
-  );
+  if (tab === "want") return `${names} ${people.length === 1 ? "quer ir" : "querem ir"}`;
+  return `${names} já ${people.length === 1 ? "foi" : "foram"}`;
 }
 
-export default async function RolePage({ searchParams }: PageProps<"/role">) {
-  const { user } = await requireUser();
-  const params = await searchParams;
+function peopleNote(place: PlaceListItem, tab: Tab) {
+  const line = peopleLine(place, tab);
+  if (!line) return null;
+  return <p className="text-narga text-xs font-medium">{line}</p>;
+}
 
-  const tab: Tab = params.tab === "visited" ? "visited" : "want";
-  const onlyMe = params.eu === "1";
-  const cat = typeof params.cat === "string" ? params.cat : undefined;
-
-  const current = new URLSearchParams();
-  if (params.tab === "visited") current.set("tab", "visited");
-  if (onlyMe) current.set("eu", "1");
-  if (cat) current.set("cat", cat);
-
-  const [categories, places] = await Promise.all([
-    listCategories(),
-    listPlaces({ userId: user.id, categorySlug: cat }),
-  ]);
-
-  const items = places
+/** Lugares da aba, já filtrados pelo "só eu". A categoria vem filtrada da query. */
+function forTab(places: PlaceListItem[], tab: Tab, onlyMe: boolean): PlaceListItem[] {
+  return places
     .filter((place) => {
       const people = tab === "want" ? place.wantUsers : place.visitedUsers;
       if (people.length === 0) return false;
@@ -73,6 +57,42 @@ export default async function RolePage({ searchParams }: PageProps<"/role">) {
       }
       return a.name.localeCompare(b.name, "pt-BR");
     });
+}
+
+/** O que a roleta sorteia: sempre a lista "quero ir", mesmo estando na aba "Já fui". */
+function toCandidate(place: PlaceListItem): SorteioCandidate {
+  return {
+    id: place.id,
+    slug: place.slug,
+    name: place.name,
+    emoji: place.category.emoji,
+    address: shortAddress(place.address),
+    people: peopleLine(place, "want") ?? "",
+  };
+}
+
+export default async function RolePage({ searchParams }: PageProps<"/role">) {
+  const { user } = await requireUser();
+  const params = await searchParams;
+
+  const tab: Tab = params.tab === "visited" ? "visited" : "want";
+  const onlyMe = params.eu === "1";
+  const cat = typeof params.cat === "string" ? params.cat : undefined;
+  const tag = typeof params.tag === "string" && params.tag ? params.tag : undefined;
+
+  const current = new URLSearchParams();
+  if (params.tab === "visited") current.set("tab", "visited");
+  if (onlyMe) current.set("eu", "1");
+  if (cat) current.set("cat", cat);
+  if (tag) current.set("tag", tag);
+
+  const [categories, places] = await Promise.all([
+    listCategories(),
+    listPlaces({ userId: user.id, categorySlug: cat, tag }),
+  ]);
+
+  const items = forTab(places, tab, onlyMe);
+  const candidates = (tab === "want" ? items : forTab(places, "want", onlyMe)).map(toCandidate);
 
   return (
     <div className="flex flex-1 flex-col gap-3 p-4">
@@ -100,7 +120,7 @@ export default async function RolePage({ searchParams }: PageProps<"/role">) {
         >
           só eu
         </Link>
-        <SortearButton />
+        <SortearButton candidates={candidates} />
       </div>
 
       <CategoryChips categories={categories} />

@@ -1,9 +1,14 @@
-import { Users } from "lucide-react";
+import { Activity, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { requireUser } from "@/lib/auth/guards";
+import { cn } from "@/lib/utils";
+
+/** Alvo de 44 px, como o resto dos toques (docs/04). */
+const headerIcon =
+  "text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-11 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-3";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   await requireUser();
@@ -23,11 +28,15 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         </Link>
 
         <Link
-          href="/galera"
-          aria-label="Galera"
-          title="Galera"
-          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 ml-auto flex size-11 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-3"
+          href="/feed"
+          aria-label="Novidades"
+          title="Novidades"
+          className={cn("ml-auto", headerIcon)}
         >
+          <Activity className="size-5" aria-hidden />
+        </Link>
+
+        <Link href="/galera" aria-label="Galera" title="Galera" className={headerIcon}>
           <Users className="size-5" aria-hidden />
         </Link>
       </header>

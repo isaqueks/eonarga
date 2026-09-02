@@ -7,6 +7,8 @@ import { UserAvatar } from "@/components/user-avatar";
 import { requireUser } from "@/lib/auth/guards";
 import { listGalera, type GaleraUser } from "@/lib/queries/users";
 
+import { Placar } from "./placar";
+
 export const metadata: Metadata = { title: "Galera" };
 
 export const dynamic = "force-dynamic";
@@ -48,6 +50,8 @@ export default async function GaleraPage() {
           {people.length} {people.length === 1 ? "pessoa" : "pessoas"}. Nada é privado.
         </p>
       </header>
+
+      {people.length > 0 ? <Placar people={people} /> : null}
 
       <ul className="grid gap-3 sm:grid-cols-2">
         {people.map((person) => (

@@ -12,3 +12,11 @@ export const VERDICT_MAX = 120;
 export const CONTENT_TEXT_MAX = 5000;
 /** Teto do HTML cru. Marcação pesada cabe folgada; payload gigante não passa. */
 export const CONTENT_HTML_MAX = 40_000;
+
+/** Resposta numa avaliação: texto puro, curto de propósito (é thread, não ensaio). */
+export const COMMENT_MAX = 500;
+
+/** Tags livres por lugar: quantas cabem e o tamanho de cada uma (ver src/lib/tags.ts). */
+export const TAG_MAX_PER_PLACE = 8;
+export const TAG_MIN_LENGTH = 2;
+export const TAG_MAX_LENGTH = 24;

@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { categories, places, reviews, userPlaceStatus, users } from "@/lib/db/schema";
+import { categories, placeTags, places, reviews, userPlaceStatus, users } from "@/lib/db/schema";
 import { isApprovedByNarga } from "@/lib/ranking";
+import { normalizeTag } from "@/lib/tags";
 
 export interface PersonRef {
   id: string;
@@ -43,6 +44,8 @@ export interface PlaceListItem {
   latestVerdict: string | null;
   /** Quem escreveu esse veredito. */
   latestVerdictAuthor: string | null;
+  /** Tags livres do lugar, em ordem alfabética. */
+  tags: string[];
 }
 
 export interface PlaceDetail extends PlaceListItem {
@@ -160,7 +163,31 @@ async function loadStatuses(placeIds: string[]) {
 
 type StatusRow = Awaited<ReturnType<typeof loadStatuses>>[number];
 
-function buildItem(row: PlaceRow, statuses: StatusRow[], userId: string): PlaceListItem {
+/** Tags de vários lugares numa query só, já em ordem alfabética. */
+async function loadTags(placeIds: string[]): Promise<Map<string, string[]>> {
+  const byPlace = new Map<string, string[]>();
+  if (placeIds.length === 0) return byPlace;
+
+  const rows = await db
+    .select({ placeId: placeTags.placeId, tag: placeTags.tag })
+    .from(placeTags)
+    .where(inArray(placeTags.placeId, placeIds))
+    .orderBy(asc(placeTags.tag));
+
+  for (const row of rows) {
+    const list = byPlace.get(row.placeId);
+    if (list) list.push(row.tag);
+    else byPlace.set(row.placeId, [row.tag]);
+  }
+  return byPlace;
+}
+
+function buildItem(
+  row: PlaceRow,
+  statuses: StatusRow[],
+  tags: string[],
+  userId: string,
+): PlaceListItem {
   const reviewCount = Number(row.reviewCount ?? 0);
   const meanStars = reviewCount > 0 ? Number(row.sumStars ?? 0) / reviewCount : null;
 
@@ -201,6 +228,7 @@ function buildItem(row: PlaceRow, statuses: StatusRow[], userId: string): PlaceL
     lastReviewAt: row.lastReviewAt,
     latestVerdict: row.latestVerdict,
     latestVerdictAuthor: row.latestVerdictAuthor,
+    tags,
   };
 }
 
@@ -208,6 +236,8 @@ export interface ListPlacesOptions {
   /** Pra resolver o `myStatus` de cada lugar. */
   userId: string;
   categorySlug?: string;
+  /** Só lugares com essa tag (já normalizada ou não — a função normaliza). */
+  tag?: string;
   includeArchived?: boolean;
 }
 
@@ -220,6 +250,20 @@ export async function listPlaces(opts: ListPlacesOptions): Promise<PlaceListItem
   if (!opts.includeArchived) filters.push(eq(places.status, "active"));
   if (opts.categorySlug) filters.push(eq(categories.slug, opts.categorySlug));
 
+  if (opts.tag !== undefined) {
+    const tag = normalizeTag(opts.tag);
+    // Tag que nem existiria no banco: lista vazia, sem ir ao banco.
+    if (tag === null) return [];
+    filters.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(placeTags)
+          .where(and(eq(placeTags.placeId, places.id), eq(placeTags.tag, tag))),
+      ),
+    );
+  }
+
   const rows = (await db
     .select(placeColumns)
     .from(places)
@@ -229,7 +273,8 @@ export async function listPlaces(opts: ListPlacesOptions): Promise<PlaceListItem
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(asc(categories.sortOrder), asc(places.name))) as PlaceRow[];
 
-  const statuses = await loadStatuses(rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const [statuses, tags] = await Promise.all([loadStatuses(ids), loadTags(ids)]);
   const byPlace = new Map<string, StatusRow[]>();
   for (const s of statuses) {
     const list = byPlace.get(s.placeId);
@@ -237,7 +282,9 @@ export async function listPlaces(opts: ListPlacesOptions): Promise<PlaceListItem
     else byPlace.set(s.placeId, [s]);
   }
 
-  return rows.map((row) => buildItem(row, byPlace.get(row.id) ?? [], opts.userId));
+  return rows.map((row) =>
+    buildItem(row, byPlace.get(row.id) ?? [], tags.get(row.id) ?? [], opts.userId),
+  );
 }
 
 /** Ficha completa. Devolve também os arquivados (a tela mostra a faixa "Arquivado"). */
@@ -268,10 +315,10 @@ export async function getPlaceBySlug(slug: string, userId: string): Promise<Plac
   const row = rows[0];
   if (!row) return null;
 
-  const statuses = await loadStatuses([row.id]);
+  const [statuses, tags] = await Promise.all([loadStatuses([row.id]), loadTags([row.id])]);
 
   return {
-    ...buildItem(row as PlaceRow, statuses, userId),
+    ...buildItem(row as PlaceRow, statuses, tags.get(row.id) ?? [], userId),
     description: row.description,
     tips: row.tips,
     instagram: row.instagram,
@@ -317,7 +364,8 @@ export async function listPlacesCreatedBy(userId: string): Promise<PlaceListItem
     .where(eq(places.createdBy, userId))
     .orderBy(desc(places.createdAt))) as PlaceRow[];
 
-  const statuses = await loadStatuses(rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const [statuses, tags] = await Promise.all([loadStatuses(ids), loadTags(ids)]);
   const byPlace = new Map<string, StatusRow[]>();
   for (const s of statuses) {
     const list = byPlace.get(s.placeId);
@@ -325,5 +373,23 @@ export async function listPlacesCreatedBy(userId: string): Promise<PlaceListItem
     else byPlace.set(s.placeId, [s]);
   }
 
-  return rows.map((row) => buildItem(row, byPlace.get(row.id) ?? [], userId));
+  return rows.map((row) =>
+    buildItem(row, byPlace.get(row.id) ?? [], tags.get(row.id) ?? [], userId),
+  );
+}
+
+/**
+ * Tags mais usadas, da mais popular pra menos. Só conta lugar ativo — tag que só
+ * sobrou em arquivado não deve aparecer no filtro do ranking.
+ */
+export async function listTagsWithCounts(): Promise<{ tag: string; count: number }[]> {
+  const rows = await db
+    .select({ tag: placeTags.tag, count: sql<number>`count(*)` })
+    .from(placeTags)
+    .innerJoin(places, eq(places.id, placeTags.placeId))
+    .where(eq(places.status, "active"))
+    .groupBy(placeTags.tag)
+    .orderBy(desc(sql`count(*)`), asc(placeTags.tag));
+
+  return rows.map((row) => ({ tag: row.tag, count: Number(row.count) }));
 }

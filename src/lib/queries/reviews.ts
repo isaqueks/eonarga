@@ -9,6 +9,7 @@ import {
   reviews,
   users,
 } from "@/lib/db/schema";
+import { listCommentsForReviews, type CommentItem } from "@/lib/queries/comments";
 import { ratingToStars } from "@/lib/ranking";
 
 export interface ReactionSummary {
@@ -33,6 +34,8 @@ export interface ReviewItem {
   author: { id: string; name: string; avatarId: string | null };
   /** Só emojis com pelo menos uma reação, na ordem de `REACTION_EMOJIS`. */
   reactions: ReactionSummary[];
+  /** Thread curta de respostas, da mais antiga pra mais nova. */
+  comments: CommentItem[];
   canEdit: boolean;
   canDelete: boolean;
 }
@@ -115,7 +118,12 @@ async function loadReactions(reviewIds: string[], viewerId: string) {
   return byReview;
 }
 
-function buildItem(row: ReviewRow, reactions: ReactionSummary[], viewer: Viewer): ReviewItem {
+function buildItem(
+  row: ReviewRow,
+  reactions: ReactionSummary[],
+  comments: CommentItem[],
+  viewer: Viewer,
+): ReviewItem {
   const mine = row.authorId === viewer.id;
   return {
     id: row.id,
@@ -129,6 +137,7 @@ function buildItem(row: ReviewRow, reactions: ReactionSummary[], viewer: Viewer)
     updatedAt: row.updatedAt,
     author: { id: row.authorId, name: row.authorName, avatarId: row.authorAvatarId },
     reactions,
+    comments,
     canEdit: mine,
     canDelete: mine || viewer.role === "admin",
   };
@@ -143,12 +152,15 @@ export async function getReviewsForPlace(placeId: string, viewer: Viewer): Promi
     .where(eq(reviews.placeId, placeId))
     .orderBy(desc(reviews.updatedAt))) as ReviewRow[];
 
-  const reactions = await loadReactions(
-    rows.map((r) => r.id),
-    viewer.id,
-  );
+  const ids = rows.map((r) => r.id);
+  const [reactions, comments] = await Promise.all([
+    loadReactions(ids, viewer.id),
+    listCommentsForReviews(ids, viewer),
+  ]);
 
-  return rows.map((row) => buildItem(row, reactions.get(row.id) ?? [], viewer));
+  return rows.map((row) =>
+    buildItem(row, reactions.get(row.id) ?? [], comments.get(row.id) ?? [], viewer),
+  );
 }
 
 /** A minha avaliação desse lugar (pra decidir entre "Dar minha nota" e "Editar"). */
@@ -164,8 +176,10 @@ export async function getMyReview(placeId: string, userId: string): Promise<Revi
   if (!row) return null;
 
   const reactions = await loadReactions([row.id], userId);
-  // É a própria avaliação: `canEdit`/`canDelete` não dependem do papel.
-  return buildItem(row, reactions.get(row.id) ?? [], { id: userId, role: "member" });
+  // É a própria avaliação: `canEdit`/`canDelete` não dependem do papel. As respostas
+  // ficam de fora porque quem chama isso só quer saber "já dei nota?" (a thread vem
+  // pela `getReviewsForPlace`, que é quem desenha o card).
+  return buildItem(row, reactions.get(row.id) ?? [], [], { id: userId, role: "member" });
 }
 
 /** Avaliações de uma pessoa, com o lugar junto. Usado no perfil. */
@@ -185,13 +199,14 @@ export async function listReviewsByUser(userId: string, viewer: Viewer): Promise
     .where(eq(reviews.userId, userId))
     .orderBy(desc(reviews.updatedAt));
 
-  const reactions = await loadReactions(
-    rows.map((r) => r.id),
-    viewer.id,
-  );
+  const ids = rows.map((r) => r.id);
+  const [reactions, comments] = await Promise.all([
+    loadReactions(ids, viewer.id),
+    listCommentsForReviews(ids, viewer),
+  ]);
 
   return rows.map((row) => ({
-    ...buildItem(row as ReviewRow, reactions.get(row.id) ?? [], viewer),
+    ...buildItem(row as ReviewRow, reactions.get(row.id) ?? [], comments.get(row.id) ?? [], viewer),
     place: {
       id: row.placeId,
       slug: row.placeSlug,

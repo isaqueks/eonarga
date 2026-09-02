@@ -46,4 +46,6 @@ Este diretório é o plano do projeto: o que vamos construir, como, e em que ord
 
 - [x] Plano escrito
 - [x] Decisões respondidas (02/09/2026)
-- [ ] Fase 0: setup do projeto (em andamento)
+- [x] Fases 0 a 4 no ar em `eonarga.com.br`
+- [x] Fase 6 (v2) entregue em 02/09/2026
+- [ ] Instalar de fato num Android e num iPhone; testar "colar link do Maps" com links reais do grupo

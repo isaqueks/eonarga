@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { CategoryChips } from "@/components/places/category-chips";
+import { TagChips } from "@/components/places/tag-chips";
 import { requireUser } from "@/lib/auth/guards";
 import { MAP_CENTER, MAP_DEFAULT_ZOOM } from "@/lib/config";
 import { listCategories } from "@/lib/queries/categories";
@@ -14,10 +15,11 @@ export default async function MapaPage({ searchParams }: PageProps<"/mapa">) {
   const { user } = await requireUser();
   const params = await searchParams;
   const cat = typeof params.cat === "string" ? params.cat : undefined;
+  const tag = typeof params.tag === "string" ? params.tag : undefined;
 
   const [categories, places] = await Promise.all([
     listCategories(),
-    listPlaces({ userId: user.id, categorySlug: cat }),
+    listPlaces({ userId: user.id, categorySlug: cat, tag }),
   ]);
 
   return (
@@ -26,6 +28,8 @@ export default async function MapaPage({ searchParams }: PageProps<"/mapa">) {
       <div className="shrink-0">
         <CategoryChips categories={categories} />
       </div>
+      {/* Sem a linha de tags (a tela é curta): só a chip pra tirar o filtro que veio no link. */}
+      <TagChips tags={[]} activeTag={tag ?? null} params={params} basePath="/mapa" />
       <div className="min-h-0 flex-1">
         <MapView places={places} center={MAP_CENTER} zoom={MAP_DEFAULT_ZOOM} />
       </div>
