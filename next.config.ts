@@ -38,6 +38,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Headers de segurança do docs/05, em todas as rotas.
+        source: "/(.*)",
+        headers: securityHeaders(),
+      },
+      {
         // O service worker nunca pode vir do cache do navegador, senão uma versão
         // velha ficaria presa mandando no app.
         source: "/sw.js",
@@ -49,5 +54,41 @@ const nextConfig: NextConfig = {
     ];
   },
 };
+
+/**
+ * CSP e afins (docs/05). Sem nonce de propósito: o App Router e o next-themes
+ * precisam de script inline, e nonce exigiria plumbing no proxy pra ganho pequeno
+ * num app fechado. O que a CSP fecha de verdade aqui: origem de scripts, imagens
+ * (só nós e os tiles do OSM), frames e formulários.
+ */
+function securityHeaders() {
+  const dev = process.env.NODE_ENV !== "production";
+  const csp = [
+    "default-src 'self'",
+    // Turbopack usa eval no dev; Cloudflare pode injetar Rocket Loader / Web Analytics.
+    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""} https://ajax.cloudflare.com https://static.cloudflareinsights.com`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://tile.openstreetmap.org",
+    "font-src 'self' data:",
+    `connect-src 'self'${dev ? " ws: wss:" : ""} https://cloudflareinsights.com`,
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "media-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    ...(dev ? [] : ["upgrade-insecure-requests"]),
+  ].join("; ");
+
+  return [
+    { key: "Content-Security-Policy", value: csp },
+    { key: "X-Content-Type-Options", value: "nosniff" },
+    { key: "X-Frame-Options", value: "DENY" },
+    // Manda só a origem pra terceiros (os tiles do OSM pedem pra saber quem chama).
+    { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    { key: "Permissions-Policy", value: "geolocation=(self), camera=(self), microphone=()" },
+  ];
+}
 
 export default nextConfig;

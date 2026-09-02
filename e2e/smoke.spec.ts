@@ -72,6 +72,13 @@ test("rotas protegidas mandam pro login", async ({ page }) => {
 });
 
 test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async ({ page }) => {
+  // Qualquer bloqueio da CSP (next.config.ts) aparece no console: a corrida inteira
+  // precisa terminar sem nenhum.
+  const cspErrors: string[] = [];
+  page.on("console", (message) => {
+    if (/Content Security Policy|Refused to/i.test(message.text())) cspErrors.push(message.text());
+  });
+
   await login(page);
 
   // Ranking vazio
@@ -311,6 +318,8 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await page.goto("/perfil");
   await page.getByRole("button", { name: "Sair" }).click();
   await page.waitForURL(/\/login/);
+
+  expect(cspErrors, "a CSP bloqueou alguma coisa durante o fluxo").toEqual([]);
 });
 
 test("link público do lugar abre pra quem não tem conta", async ({ page, browser }) => {
