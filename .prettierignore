@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+data
+drizzle
+public/icons
+package-lock.json

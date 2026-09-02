@@ -1,0 +1,492 @@
+/*
+ * Visual do reNARGA. Copia o reCAPTCHA v2 na régua: cores, tamanhos e sombras
+ * são fixos de propósito e NÃO usam os tokens do tema do app — o widget fica
+ * sempre claro, inclusive no tema escuro. Isso é parte da piada.
+ */
+
+.root {
+  position: relative;
+  display: inline-block;
+  color-scheme: light;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── widget ─────────────────────────────────────────────────────────────── */
+
+.widget {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  width: 304px;
+  max-width: 100%;
+  height: 78px;
+  padding: 0 12px;
+  color: #000;
+  background: #f9f9f9;
+  border: 1px solid #d3d3d3;
+  border-radius: 3px;
+  box-shadow: 0 0 4px 1px rgb(0 0 0 / 8%);
+}
+
+.check {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.checkBusy {
+  cursor: default;
+}
+
+.boxWrap {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+.native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: inherit;
+  opacity: 0;
+}
+
+.box {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 2px solid #c1c1c1;
+  border-radius: 2px;
+}
+
+.boxBare {
+  background: transparent;
+  border-color: transparent;
+}
+
+.native:focus-visible ~ .box {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+}
+
+.label {
+  font-size: 14px;
+  line-height: 17px;
+  color: #000;
+  user-select: none;
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #dbe6f2;
+  border-top-color: #4a90e2;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.checkIcon {
+  width: 27px;
+  height: 27px;
+}
+
+.checkIcon path {
+  fill: none;
+  stroke: #009e2e;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+  stroke-dasharray: 42;
+  stroke-dashoffset: 42;
+  animation: draw 300ms ease-out forwards;
+}
+
+/* ── logo ───────────────────────────────────────────────────────────────── */
+
+.logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 76px;
+  margin-left: auto;
+  text-align: center;
+}
+
+.logoImg {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.brand {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 11px;
+  color: #555;
+}
+
+.legal {
+  margin-top: 2px;
+  font-size: 8px;
+  line-height: 10px;
+  color: #555;
+}
+
+.legal a {
+  color: #555;
+  text-decoration: none;
+}
+
+.legal a:hover,
+.legal a:focus-visible {
+  text-decoration: underline;
+}
+
+/* ── popup do desafio ───────────────────────────────────────────────────── */
+
+.popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 2147483000;
+  box-sizing: border-box;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+  color: #000;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-shadow: 0 2px 18px rgb(0 0 0 / 25%);
+}
+
+.header {
+  padding: 12px 14px 14px;
+  color: #fff;
+  background: #1a73e8;
+}
+
+.headerPrompt {
+  display: block;
+  font-size: 14px;
+  line-height: 17px;
+}
+
+.headerKeyword {
+  display: block;
+  margin-top: 2px;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.headerHint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 15px;
+}
+
+.body {
+  padding: 8px;
+  background: #fff;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.tile {
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+  background: #fff;
+  border: 0;
+}
+
+.tile:focus-visible {
+  outline: 3px solid #1a73e8;
+  outline-offset: -3px;
+}
+
+.tileImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 150ms ease;
+}
+
+.tile[aria-pressed="true"] .tileImg {
+  transform: scale(0.85);
+}
+
+.badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #fff;
+  background: #1a73e8;
+  border-radius: 50%;
+}
+
+.badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tile[aria-pressed="true"] .badge {
+  display: flex;
+}
+
+.fresh {
+  animation: fade 400ms ease;
+}
+
+/* ── desafio de texto / áudio ───────────────────────────────────────────── */
+
+.textImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #efefe9;
+  border: 1px solid #dcdcdc;
+  border-radius: 2px;
+}
+
+.answerLabel {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  line-height: 15px;
+  color: #555;
+}
+
+.answer {
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #000;
+  background: #fff;
+  border: 1px solid #c1c1c1;
+  border-radius: 2px;
+}
+
+.answer:focus {
+  border-color: #1a73e8;
+  outline: 2px solid #1a73e8;
+  outline-offset: -2px;
+}
+
+.audioBox {
+  padding: 18px 6px;
+  text-align: center;
+}
+
+.audioIcon {
+  width: 42px;
+  height: 42px;
+  color: #1a73e8;
+}
+
+/* ── mensagens ──────────────────────────────────────────────────────────── */
+
+.error,
+.notice,
+.info {
+  padding: 0 12px 8px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 15px;
+}
+
+.error {
+  color: #d93025;
+}
+
+.notice {
+  color: #1a73e8;
+}
+
+.info {
+  color: #555;
+}
+
+/* ── rodapé ─────────────────────────────────────────────────────────────── */
+
+.footer {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 6px 8px 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  color: #9aa0a6;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+}
+
+.iconBtn:hover {
+  color: #444;
+  background: #f1f3f4;
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid #1a73e8;
+}
+
+.iconBtn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.verify {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  height: 34px;
+  padding: 0 16px;
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  background: #1a73e8;
+  border: 0;
+  border-radius: 2px;
+}
+
+.verify:hover {
+  background: #1765cc;
+}
+
+.verify:focus-visible {
+  outline: 2px solid #0b47a1;
+  outline-offset: 2px;
+}
+
+.verify:disabled {
+  cursor: default;
+}
+
+.btnSpinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgb(255 255 255 / 45%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.tooltip {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  left: 8px;
+  z-index: 5;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 14px;
+  color: #fff;
+  background: #202124;
+  border-radius: 3px;
+}
+
+/* ── animações ──────────────────────────────────────────────────────────── */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .btnSpinner,
+  .fresh {
+    animation: none;
+  }
+
+  .checkIcon path {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+
+  .tileImg {
+    transition: none;
+  }
+
+  .tile[aria-pressed="true"] .tileImg {
+    transform: none;
+  }
+
+  /* sem o encolher, a seleção precisa de outra pista */
+  .tile[aria-pressed="true"] {
+    outline: 3px solid #1a73e8;
+    outline-offset: -3px;
+  }
+}
+
+@media (width <= 360px) {
+  .widget {
+    width: 100%;
+  }
+
+  .popup {
+    width: 100%;
+  }
+}

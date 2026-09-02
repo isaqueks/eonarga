@@ -1,0 +1,121 @@
+/* Estilos dos pinos e clusters. Ficam em CSS puro porque o Leaflet monta o HTML
+   dos ícones fora do React (divIcon), então classes utilitárias do Tailwind não
+   seriam detectadas de forma confiável. */
+
+.narga-map {
+  background: var(--background);
+}
+
+.narga-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--background) 78%, transparent);
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.narga-map .leaflet-control-attribution a {
+  color: var(--muted-foreground);
+}
+
+.narga-map .leaflet-bar,
+.narga-map .leaflet-bar a {
+  background: var(--card);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.narga-map .leaflet-bar a:hover {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+/* Wrapper do divIcon: o Leaflet já posiciona; aqui só zeramos o visual padrão. */
+.narga-pin-wrap {
+  background: none;
+  border: 0;
+}
+
+.narga-pin {
+  --pin-color: #9aa39e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 2px solid var(--pin-color);
+  background: color-mix(in srgb, var(--pin-color) 22%, #0e1110);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 45%);
+  font-size: 16px;
+  line-height: 1;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+/* Selo "Aprovado pelo narga": anel/brilho no verde do meme. */
+.narga-pin[data-approved="true"] {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--narga, #8fd3b0) 55%, transparent),
+    0 0 14px color-mix(in srgb, var(--narga, #8fd3b0) 70%, transparent),
+    0 2px 6px rgb(0 0 0 / 45%);
+}
+
+/* "Quero ir": contorno tracejado. */
+.narga-pin[data-want="true"] {
+  border-style: dashed;
+}
+
+.narga-pin[data-selected="true"] {
+  transform: scale(1.18);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--pin-color) 60%, transparent),
+    0 4px 10px rgb(0 0 0 / 55%);
+}
+
+.narga-cluster-wrap {
+  background: none;
+  border: 0;
+}
+
+.narga-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 2px solid var(--narga, #8fd3b0);
+  background: color-mix(in srgb, var(--narga, #8fd3b0) 20%, #0e1110);
+  color: var(--foreground, #e8ece9);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 50%);
+}
+
+.narga-cluster[data-size="lg"] {
+  width: 48px;
+  height: 48px;
+  font-size: 15px;
+}
+
+/* Pontinho azul do "onde estou". */
+.narga-here {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #4c9aff;
+  border: 2px solid #eaf2ff;
+  box-shadow: 0 0 0 6px rgb(76 154 255 / 25%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .narga-pin {
+    transition: none;
+  }
+}
+
+/* Tema escuro: o OSM só tem tiles claros, então invertemos o pane dos tiles.
+   Pinos e controles ficam em panes separados e não são afetados. */
+.dark .narga-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) saturate(0.55);
+}

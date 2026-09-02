@@ -1,0 +1,35 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: file:/app/data/eonarga.db
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      - app_data:/app/data
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      # Em produção fica o domínio. Pra testar local: SITE_ADDRESS=localhost
+      SITE_ADDRESS: ${SITE_ADDRESS:-eonarga.com.br}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  # Banco SQLite + uploads. Backup: ver README.
+  app_data:
+  caddy_data:
+  caddy_config:
