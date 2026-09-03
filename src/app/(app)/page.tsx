@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/empty-state";
 import { CategoryChips } from "@/components/places/category-chips";
-import { InstallBanner } from "@/components/pwa/install-banner";
+import { InstallAppButton } from "@/components/pwa/install-app-button";
 import { PushNudge } from "@/components/pwa/push-nudge";
 import { RankingControls } from "@/components/places/ranking-controls";
 import { TagChips, TOP_TAGS } from "@/components/places/tag-chips";
@@ -117,7 +117,7 @@ export default async function RankingPage({ searchParams }: PageProps<"/">) {
         params={params}
         basePath="/"
       />
-      <InstallBanner />
+      <InstallAppButton />
       <PushNudge />
       {nothingAtAll ? null : <RankingControls />}
 

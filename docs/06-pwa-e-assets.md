@@ -133,10 +133,10 @@ só o root layout. Cachorro + "Sem internet. E o narga? Fica pra depois." + "Ten
 
 ## Instalação
 
-`src/components/pwa/install-banner.tsx`, renderizado no topo do Ranking.
+`src/components/pwa/install-app-button.tsx` (com o `beforeinstallprompt` guardado em `install-prompt-store.ts`), renderizado no topo do Ranking e do Feed.
 
-- **Android/Chrome**: captura `beforeinstallprompt` (com `preventDefault()`, senão o Chrome mostra a barrinha dele) e oferece "Bota na tela inicial?" com os botões "Instalar" e "Agora não".
-- **iOS/Safari**: não tem prompt. Detecta iOS (inclusive iPad, que se apresenta como Macintosh — o `maxTouchPoints` entrega) e mostra "Compartilhar → Adicionar à Tela de Início".
+- **Android/Chrome**: o `beforeinstallprompt` é capturado no root layout e guardado fora do React; o botão "Instalar aplicativo" (fixo na home e no feed, só no celular e só sem o app instalado) usa o prompt nativo quando existe, senão abre as instruções do menu do navegador.
+- **iOS/Safari**: não tem prompt. O mesmo botão abre as instruções: Safari → Compartilhar → Adicionar à Tela de Início.
 - **Só a partir da 2ª visita**: contador em `localStorage` `eonarga:visits`, incrementado uma vez por sessão (`sessionStorage` `eonarga:visit-counted`).
 - **Dispensar**: `eonarga:install-dismissed` guarda a data; some por 30 dias. Recusar o prompt nativo conta como dispensar.
 - Depois de instalado (`display-mode: standalone`, ou `navigator.standalone` no iOS), não aparece nada.

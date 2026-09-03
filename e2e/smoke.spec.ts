@@ -86,6 +86,15 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(page.getByText("Nenhum lugar ainda. E o narga?")).toBeVisible();
   await shot(page, "05-ranking-vazio");
 
+  // Celular sem o app instalado: "Instalar aplicativo" fica fixo; sem prompt nativo
+  // (headless não manda beforeinstallprompt) abre as instruções.
+  const instalar = page.getByRole("button", { name: "Instalar aplicativo" });
+  await expect(instalar).toBeVisible();
+  await instalar.click();
+  await expect(page.getByRole("dialog")).toContainText("Instalar o E o narga?");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+
   // Novo lugar: marcar no mapa
   // Botões que viram <Link> ganham role="button" no Base UI; seleciona pelo texto.
   await page.getByText("Adicionar o primeiro").click();
@@ -418,6 +427,7 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   // A avaliação do fluxo anterior aparece no feed como card, não como linha solta.
   await page.goto("/feed");
   await expect(page.getByRole("heading", { name: "Novidades" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Instalar aplicativo" })).toBeVisible();
   const cardDaNota = page.locator("article").filter({ hasText: "Melhor sebo do Centro" });
   await expect(cardDaNota).toContainText("Achei um Bukowski");
   await expect(cardDaNota.getByRole("link", { name: /Sebo do João/ })).toHaveAttribute(

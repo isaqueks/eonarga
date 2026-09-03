@@ -4,6 +4,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { PostCard } from "@/components/posts/post-card";
 import { ReviewFeedCard } from "@/components/posts/review-feed-card";
+import { InstallAppButton } from "@/components/pwa/install-app-button";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import { requireUser } from "@/lib/auth/guards";
@@ -43,6 +44,8 @@ export default async function FeedPage({ searchParams }: PageProps<"/feed">) {
           </Link>
         ) : null}
       </header>
+
+      <InstallAppButton />
 
       <Button
         size="lg"

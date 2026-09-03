@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
+import { ensureInstallPromptListener } from "./install-prompt-store";
+
 /** Versão do app (package.json), injetada pelo next.config.ts. Muda a URL do SW a cada release. */
 const VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
@@ -19,6 +21,9 @@ export function ServiceWorker() {
   const reloadOnTakeover = useRef(false);
 
   useEffect(() => {
+    // O `beforeinstallprompt` do Chrome dispara cedo e uma vez só: captura aqui, no
+    // root layout, pra o botão "Instalar aplicativo" de qualquer tela poder usar.
+    ensureInstallPromptListener();
     if (process.env.NODE_ENV !== "production") return;
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
 

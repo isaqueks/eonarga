@@ -131,6 +131,8 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 
 - [x] Correção: "visto por último" na galera passa a refletir o último uso (`last_seen_at`, folga de 5 min), não o último login
 
+- [x] Botão fixo "Instalar aplicativo" na home e no feed pra celular sem o PWA (substitui o banner da 2ª visita)
+
 ## Definição de pronto (qualquer tarefa)
 
 - Funciona no celular (Chrome Android e Safari iOS) e no desktop
