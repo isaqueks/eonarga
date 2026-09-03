@@ -79,6 +79,22 @@ export function formatLatLng(lat: number, lng: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
+/** Tamanho do trecho do comentário que vai no push: o balão do celular corta em ~2 linhas. */
+export const COMMENT_PUSH_EXCERPT_MAX = 90;
+
+/**
+ * Corpo do push "fulano comentou no seu post": o comentário vira uma linha só e,
+ * passando do limite, é cortado com reticências.
+ */
+export function commentNotificationBody(commenterName: string, comment: string): string {
+  const oneLine = comment.replace(/\s+/g, " ").trim();
+  const excerpt =
+    oneLine.length > COMMENT_PUSH_EXCERPT_MAX
+      ? `${oneLine.slice(0, COMMENT_PUSH_EXCERPT_MAX - 1).trimEnd()}…`
+      : oneLine;
+  return `${commenterName} comentou no seu post: “${excerpt}”`;
+}
+
 /** Quanto do texto da avaliação cabe na prévia do card do feed. */
 export const FEED_PREVIEW_MAX = 280;
 

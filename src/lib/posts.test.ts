@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COMMENT_PUSH_EXCERPT_MAX,
+  commentNotificationBody,
   FEED_PREVIEW_MAX,
   formatLatLng,
   haversineMeters,
@@ -166,5 +168,34 @@ describe("postInputSchema", () => {
     const result = postInputSchema.safeParse({ ...base, address: "a".repeat(241) });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toMatch(/máximo 240/);
+  });
+});
+
+describe("commentNotificationBody", () => {
+  it("monta a frase com o trecho entre aspas", () => {
+    expect(commentNotificationBody("Bia", "Bora amanhã?")).toBe(
+      "Bia comentou no seu post: “Bora amanhã?”",
+    );
+  });
+
+  it("achata quebras de linha e espaços repetidos", () => {
+    expect(commentNotificationBody("Bia", "  Bora\n\namanhã?   Tô   dentro ")).toBe(
+      "Bia comentou no seu post: “Bora amanhã? Tô dentro”",
+    );
+  });
+
+  it("corta comentário longo com reticências, sem espaço solto antes", () => {
+    const longo = `${"palavra ".repeat(20)}fim`;
+    const body = commentNotificationBody("Bia", longo);
+    const excerpt = body.slice("Bia comentou no seu post: “".length, -1);
+
+    expect(excerpt.endsWith("…")).toBe(true);
+    expect(excerpt.length).toBeLessThanOrEqual(COMMENT_PUSH_EXCERPT_MAX);
+    expect(excerpt).not.toMatch(/ …$/);
+  });
+
+  it("não corta comentário que cabe", () => {
+    const justo = "a".repeat(COMMENT_PUSH_EXCERPT_MAX);
+    expect(commentNotificationBody("Bia", justo)).toContain(`“${justo}”`);
   });
 });

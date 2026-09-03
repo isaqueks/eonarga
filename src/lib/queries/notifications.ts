@@ -2,11 +2,11 @@ import { desc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
 import { db } from "@/lib/db/client";
-import { notifications, places, users } from "@/lib/db/schema";
+import { NOTIFICATION_KINDS, notifications, places, users } from "@/lib/db/schema";
 
 export interface NotificationLogItem {
   id: string;
-  kind: "call" | "admin";
+  kind: (typeof NOTIFICATION_KINDS)[number];
   title: string;
   body: string;
   url: string | null;

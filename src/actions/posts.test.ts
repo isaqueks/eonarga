@@ -24,10 +24,23 @@ const AQUI = { lat: "-27.5975", lng: "-48.55" };
 
 // Quem está logado e pra onde a action redirecionou (mesmo padrão de places.test.ts).
 const state = vi.hoisted(() => ({
-  user: null as { id: string; role: "admin" | "member" } | null,
+  user: null as { id: string; name: string; role: "admin" | "member" } | null,
   redirects: [] as string[],
 }));
 
+// O push de "comentou no seu post" passa pelo web-push: aqui ele vira um espião.
+const webpush = vi.hoisted(() => ({
+  sendNotification: vi.fn(),
+  setVapidDetails: vi.fn(),
+}));
+
+const VAPID = {
+  VAPID_PUBLIC_KEY: "chave-publica",
+  VAPID_PRIVATE_KEY: "chave-privada",
+  VAPID_SUBJECT: "https://eonarga.com.br",
+};
+
+vi.mock("web-push", () => ({ default: webpush }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
@@ -94,6 +107,31 @@ async function onlyPost() {
   return rows[0];
 }
 
+/** Um post só de texto, publicado por `as`. Devolve o id. */
+async function seedTextPost(as = ANA): Promise<string> {
+  state.user = as;
+  await expectRedirect({ ...AQUI, body: "some daqui" });
+  state.user = ANA;
+  return (await onlyPost()).id;
+}
+
+async function subscribe(id: string, userId: string) {
+  await db.insert(schema.pushSubscriptions).values({
+    id,
+    userId,
+    endpoint: `https://push.example.com/${id}`,
+    p256dh: `p256dh-${id}`,
+    auth: `auth-${id}`,
+  });
+}
+
+/** Endpoints que o web-push recebeu nesta rodada. */
+function pushedTo(): string[] {
+  return webpush.sendNotification.mock.calls
+    .map((call) => (call[0] as { endpoint: string }).endpoint)
+    .sort();
+}
+
 beforeAll(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "eonarga-posts-"));
   uploadDir = path.join(tmpDir, "uploads");
@@ -156,7 +194,13 @@ afterAll(() => {
 });
 
 beforeEach(async () => {
+  // Reações e comentários somem em cascata com o post.
   await db.delete(schema.posts);
+  await db.delete(schema.notifications);
+  await db.delete(schema.pushSubscriptions);
+  Object.assign(process.env, VAPID);
+  webpush.sendNotification.mockReset();
+  webpush.sendNotification.mockResolvedValue({ statusCode: 201 });
   clearAllRateLimits();
   state.user = ANA;
 });
@@ -346,5 +390,198 @@ describe("deletePost", () => {
     const { id } = await seedPost();
     state.user = null;
     await expect(actions.deletePost(id)).rejects.toThrow("Não autorizado");
+  });
+});
+
+describe("togglePostReaction", () => {
+  it("liga e desliga a reação, devolvendo a contagem daquele emoji", async () => {
+    const id = await seedTextPost();
+
+    state.user = BIA;
+    expect(await actions.togglePostReaction(id, "🔥")).toEqual({
+      ok: true,
+      reacted: true,
+      count: 1,
+    });
+    state.user = ANA;
+    expect(await actions.togglePostReaction(id, "🔥")).toEqual({
+      ok: true,
+      reacted: true,
+      count: 2,
+    });
+    expect(await actions.togglePostReaction(id, "🔥")).toEqual({
+      ok: true,
+      reacted: false,
+      count: 1,
+    });
+
+    const rows = await db.select().from(schema.postReactions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ postId: id, userId: BIA.id, emoji: "🔥" });
+  });
+
+  it("recusa emoji fora da lista e post que não existe", async () => {
+    const id = await seedTextPost();
+
+    expect(await actions.togglePostReaction(id, "🍆")).toEqual({
+      ok: false,
+      error: "Esse emoji não existe por aqui.",
+    });
+    expect(await actions.togglePostReaction("nao-existe", "🔥")).toEqual({
+      ok: false,
+      error: "Não achei esse post.",
+    });
+  });
+
+  it("exige sessão", async () => {
+    const id = await seedTextPost();
+    state.user = null;
+    await expect(actions.togglePostReaction(id, "🔥")).rejects.toThrow("Não autorizado");
+  });
+});
+
+describe("addPostComment", () => {
+  it("grava o comentário e avisa quem postou por push, com registro no histórico", async () => {
+    const id = await seedTextPost();
+    await subscribe("ana-celular", ANA.id);
+    await subscribe("bia-celular", BIA.id);
+
+    state.user = BIA;
+    expect(
+      await actions.addPostComment(empty, form({ postId: id, body: "  Bora amanhã?  " })),
+    ).toEqual({ ok: true });
+
+    const comments = await db.select().from(schema.postComments);
+    expect(comments).toHaveLength(1);
+    expect(comments[0]).toMatchObject({ postId: id, userId: BIA.id, body: "Bora amanhã?" });
+
+    // Só o celular da Ana (dona do post) apita; o da Bia, que comentou, não.
+    expect(pushedTo()).toEqual(["https://push.example.com/ana-celular"]);
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1] as string)).toEqual({
+      title: "E o narga?",
+      body: "Bia comentou no seu post: “Bora amanhã?”",
+      url: `/feed#post-${id}`,
+      tag: `comment:${id}`,
+    });
+
+    const log = await db.select().from(schema.notifications);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({
+      kind: "comment",
+      createdBy: BIA.id,
+      targetUserId: ANA.id,
+      url: `/feed#post-${id}`,
+      sentCount: 1,
+    });
+  });
+
+  it("comentar no próprio post não apita nem entra no histórico", async () => {
+    const id = await seedTextPost();
+    await subscribe("ana-celular", ANA.id);
+
+    expect(await actions.addPostComment(empty, form({ postId: id, body: "eu mesmo" }))).toEqual({
+      ok: true,
+    });
+    expect(pushedTo()).toEqual([]);
+    expect(await db.select().from(schema.notifications)).toHaveLength(0);
+  });
+
+  it("sem push configurado, o comentário entra igual", async () => {
+    const id = await seedTextPost();
+    await subscribe("ana-celular", ANA.id);
+    delete process.env.VAPID_PRIVATE_KEY;
+
+    state.user = BIA;
+    expect(await actions.addPostComment(empty, form({ postId: id, body: "sem push" }))).toEqual({
+      ok: true,
+    });
+    expect(await db.select().from(schema.postComments)).toHaveLength(1);
+    expect(pushedTo()).toEqual([]);
+  });
+
+  it("push que falha não derruba o comentário", async () => {
+    const id = await seedTextPost();
+    await subscribe("ana-celular", ANA.id);
+    webpush.sendNotification.mockRejectedValue(new Error("serviço fora"));
+
+    state.user = BIA;
+    expect(await actions.addPostComment(empty, form({ postId: id, body: "mesmo assim" }))).toEqual({
+      ok: true,
+    });
+    expect(await db.select().from(schema.postComments)).toHaveLength(1);
+    // O envio foi tentado, ninguém recebeu, e o histórico registra zero aparelhos.
+    expect((await db.select().from(schema.notifications))[0]?.sentCount).toBe(0);
+  });
+
+  it("recusa vazio, comprido demais e post que não existe", async () => {
+    const id = await seedTextPost();
+
+    const vazio = await actions.addPostComment(empty, form({ postId: id, body: "   " }));
+    expect(vazio.ok).toBe(false);
+    expect(vazio.fieldErrors?.body).toMatch(/até 500/);
+
+    const longo = await actions.addPostComment(empty, form({ postId: id, body: "x".repeat(501) }));
+    expect(longo.ok).toBe(false);
+    expect(longo.fieldErrors?.body).toMatch(/até 500/);
+
+    expect(await actions.addPostComment(empty, form({ postId: "nao-existe", body: "oi" }))).toEqual(
+      {
+        ok: false,
+        error: "Não achei esse post.",
+      },
+    );
+    expect(await db.select().from(schema.postComments)).toHaveLength(0);
+  });
+});
+
+describe("deletePostComment", () => {
+  /** Comentário da Bia no post da Ana. Devolve o id do comentário. */
+  async function seedComment(): Promise<string> {
+    const id = await seedTextPost();
+    state.user = BIA;
+    await actions.addPostComment(empty, form({ postId: id, body: "Bora" }));
+    state.user = ANA;
+    const [comment] = await db.select().from(schema.postComments);
+    return comment.id;
+  }
+
+  it("quem comentou apaga", async () => {
+    const id = await seedComment();
+    state.user = BIA;
+    expect(await actions.deletePostComment(id)).toEqual({ ok: true });
+    expect(await db.select().from(schema.postComments)).toHaveLength(0);
+  });
+
+  it("quem postou apaga comentário dos outros no seu post", async () => {
+    const id = await seedComment();
+    state.user = ANA;
+    expect(await actions.deletePostComment(id)).toEqual({ ok: true });
+    expect(await db.select().from(schema.postComments)).toHaveLength(0);
+  });
+
+  it("admin apaga qualquer um; terceiro não", async () => {
+    const id = await seedComment();
+    state.user = ADMIN;
+    expect(await actions.deletePostComment(id)).toEqual({ ok: true });
+
+    // Limpa o post da rodada anterior: `seedComment` conta com um post só no banco.
+    await db.delete(schema.posts);
+    const outro = await seedComment();
+    await db
+      .insert(schema.users)
+      .values({ id: "user-ze", name: "Zé", email: "ze@example.com", passwordHash: "x" })
+      .onConflictDoNothing();
+    state.user = { id: "user-ze", name: "Zé", role: "member" };
+    expect(await actions.deletePostComment(outro)).toEqual({
+      ok: false,
+      error: "Esse comentário não é seu.",
+    });
+    expect(await db.select().from(schema.postComments)).toHaveLength(1);
+  });
+
+  it("reclama de id que não existe ou vazio", async () => {
+    const erro = { ok: false, error: "Comentário não encontrado." };
+    expect(await actions.deletePostComment("nao-existe")).toEqual(erro);
+    expect(await actions.deletePostComment("")).toEqual(erro);
   });
 });

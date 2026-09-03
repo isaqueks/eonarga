@@ -227,9 +227,10 @@ export const pushSubscriptions = sqliteTable(
   (t) => [index("push_subscriptions_user_idx").on(t.userId)],
 );
 
-export const NOTIFICATION_KINDS = ["call", "admin"] as const;
+// "comment" = alguém comentou no seu post (docs/08 #34); vai só pra quem postou.
+export const NOTIFICATION_KINDS = ["call", "admin", "comment"] as const;
 
-// Histórico do que foi disparado: "Chamar galera pra cá" e avisos do admin.
+// Histórico do que foi disparado: "Chamar galera pra cá", avisos do admin e comentários em post.
 export const notifications = sqliteTable(
   "notifications",
   {

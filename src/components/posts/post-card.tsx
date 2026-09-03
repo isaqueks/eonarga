@@ -31,7 +31,13 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
 
   return (
     <article
-      className={cn("border-border bg-card flex flex-col gap-2 rounded-xl border p-3", className)}
+      // Âncora do push "fulano comentou no seu post" (`/feed#post-<id>`); o scroll-mt
+      // desconta o cabeçalho fixo.
+      id={`post-${post.id}`}
+      className={cn(
+        "border-border bg-card flex scroll-mt-20 flex-col gap-2 rounded-xl border p-3",
+        className,
+      )}
     >
       <div className="flex items-start gap-2">
         <UserAvatar name={post.author.name} avatarId={post.author.avatarId} size="md" />

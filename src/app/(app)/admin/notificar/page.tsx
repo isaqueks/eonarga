@@ -64,7 +64,11 @@ export default async function AdminNotificarPage() {
               <li key={item.id} className="flex flex-col gap-1 p-3">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-narga text-xs font-semibold uppercase">
-                    {item.kind === "call" ? "chamada" : "aviso"}
+                    {item.kind === "call"
+                      ? "chamada"
+                      : item.kind === "comment"
+                        ? "comentário"
+                        : "aviso"}
                   </span>
                   <span className="text-sm font-medium">{item.title}</span>
                 </div>

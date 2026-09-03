@@ -10,8 +10,9 @@ import { field, fieldErrorsFrom, type FormState } from "@/actions/form-state";
 import { assertUser } from "@/lib/auth/guards";
 import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
-import { places, postComments, postReactions, posts } from "@/lib/db/schema";
-import { postInputSchema } from "@/lib/posts";
+import { notifications, places, postComments, postReactions, posts } from "@/lib/db/schema";
+import { commentNotificationBody, postInputSchema } from "@/lib/posts";
+import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isReactionEmoji } from "@/lib/reviews";
 import { deleteImage, MAX_UPLOAD_BYTES, saveImage, sniffImageMime } from "@/lib/storage";
@@ -172,11 +173,44 @@ const commentSchema = z.object({
 async function findPost(postId: string) {
   if (typeof postId !== "string" || postId === "") return null;
   const rows = await db
-    .select({ id: posts.id, userId: posts.userId })
+    .select({ id: posts.id, userId: posts.userId, placeId: posts.placeId })
     .from(posts)
     .where(eq(posts.id, postId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * "Fulano comentou no seu post": push só pra quem postou (docs/08 #34). Fica no
+ * histórico do admin como as chamadas, com a contagem de aparelhos que receberam.
+ * O toque na notificação abre o feed na âncora do post.
+ */
+async function notifyPostAuthor(
+  post: { id: string; userId: string; placeId: string | null },
+  commenter: { id: string; name: string },
+  comment: string,
+) {
+  const payload: PushPayload = {
+    title: "E o narga?",
+    body: commentNotificationBody(commenter.name, comment),
+    url: `/feed#post-${post.id}`,
+    // Vários comentários no mesmo post trocam o balão em vez de empilhar.
+    tag: `comment:${post.id}`,
+  };
+
+  const report = await sendPushTo([post.userId], payload);
+
+  await db.insert(notifications).values({
+    id: nanoid(12),
+    kind: "comment",
+    title: payload.title,
+    body: payload.body,
+    url: payload.url,
+    placeId: post.placeId,
+    createdBy: commenter.id,
+    targetUserId: post.userId,
+    sentCount: report.sent,
+  });
 }
 
 /** Liga/desliga uma reação minha no post e devolve o estado novo daquele emoji. */
@@ -237,6 +271,16 @@ export async function addPostComment(_prev: FormState, formData: FormData): Prom
     userId: user.id,
     body: data.body,
   });
+
+  // Comentar no próprio post não apita. E push que falhar não derruba o comentário:
+  // ele já está gravado, o aviso é bônus.
+  if (post.userId !== user.id && isPushEnabled()) {
+    try {
+      await notifyPostAuthor(post, { id: user.id, name: user.name }, data.body);
+    } catch {
+      // Sem aviso desta vez; o comentário continua no feed.
+    }
+  }
 
   revalidatePath("/feed");
   return { ok: true };

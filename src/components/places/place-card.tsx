@@ -13,6 +13,10 @@ import { ApprovedBadge, FewRatingsBadge } from "./rating-badges";
 /** Quantas tags cabem no card sem virar sopa de letrinha. */
 const MAX_TAGS = 3;
 
+/**
+ * Card do ranking. Compacto de propósito (docs/08 #35): o preço fica na linha do
+ * nome, o selo divide a linha com a nota e o espaçamento é o mínimo que ainda respira.
+ */
 export function PlaceCard({
   place,
   position,
@@ -28,12 +32,14 @@ export function PlaceCard({
 }) {
   const address = shortAddress(place.address);
   const people = note ?? <PeopleLine place={place} />;
+  // "Aprovado" pede 3 notas e "poucas notas" é pra menos de 3: nunca aparecem juntos.
+  const fewRatings = place.reviewCount > 0 && place.reviewCount < 3;
 
   return (
     <Link
       href={`/lugares/${place.slug}`}
       className={cn(
-        "border-border bg-card focus-visible:ring-ring/50 hover:bg-secondary/40 flex gap-3 border-l-4 p-3 transition-colors outline-none focus-visible:ring-3",
+        "border-border bg-card focus-visible:ring-ring/50 hover:bg-secondary/40 flex gap-3 border-l-4 px-3 py-2.5 transition-colors outline-none focus-visible:ring-3",
         "rounded-lg border-y border-r",
         className,
       )}
@@ -45,15 +51,17 @@ export function PlaceCard({
         </span>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {/* Nome com a faixa de preço encostada à direita: nada de linha só pro "$$$$". */}
         <div className="flex items-start gap-2">
           <span aria-hidden className="text-lg leading-6">
             {place.category.emoji}
           </span>
           <h3 className="min-w-0 flex-1 leading-6 font-semibold text-balance">{place.name}</h3>
+          <PriceLevel value={place.priceLevel} className="shrink-0 pt-1.5" />
         </div>
 
-        <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
           {place.meanStars !== null ? (
             <span className="text-foreground inline-flex items-center gap-1.5 font-medium">
               <NargaStars stars={place.meanStars} size="sm" />
@@ -65,18 +73,15 @@ export function PlaceCard({
           ) : (
             <span>sem nota</span>
           )}
-          {place.reviewCount > 0 && place.reviewCount < 3 ? <FewRatingsBadge /> : null}
-          <PriceLevel value={place.priceLevel} />
+          {place.approved ? <ApprovedBadge /> : fewRatings ? <FewRatingsBadge /> : null}
           {place.hasNarga === "yes" ? <HasNargaBadge value="yes" /> : null}
         </div>
-
-        {place.approved ? <ApprovedBadge className="self-start" /> : null}
 
         {address ? <p className="text-muted-foreground truncate text-xs">{address}</p> : null}
 
         {place.tags.length > 0 ? (
           // Span, não link: o card inteiro já é um <a> e âncora dentro de âncora não vale.
-          <ul className="flex flex-wrap gap-1">
+          <ul className="flex flex-wrap gap-1 py-0.5">
             {place.tags.slice(0, MAX_TAGS).map((tag) => (
               <li
                 key={tag}

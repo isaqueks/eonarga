@@ -134,6 +134,8 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Botão fixo "Instalar aplicativo" na home e no feed pra celular sem o PWA (substitui o banner da 2ª visita)
 
 - [x] Reações e comentários em posts (migration 0007): `post_reactions` / `post_comments`, `togglePostReaction` / `addPostComment` / `deletePostComment` em `actions/posts.ts`, `ReactionBar` e `CommentThread` genéricos (avaliação ou post), reação em post como linha do feed, testes do `listFeed` e e2e
+- [x] Push "fulano comentou no seu post" pra quem postou (`notifyPostAuthor` em `actions/posts.ts`, kind `comment` no histórico do admin, âncora `#post-<id>` no card), com teste da action
+- [x] Card do ranking mais compacto: preço na linha do nome, selo na linha da nota, menos espaçamento
 
 ## Definição de pronto (qualquer tarefa)
 
