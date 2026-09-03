@@ -1,16 +1,19 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 
 import { field, fieldErrorsFrom, type FormState } from "@/actions/form-state";
 import { assertUser } from "@/lib/auth/guards";
+import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
-import { places, posts } from "@/lib/db/schema";
+import { places, postComments, postReactions, posts } from "@/lib/db/schema";
 import { postInputSchema } from "@/lib/posts";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { isReactionEmoji } from "@/lib/reviews";
 import { deleteImage, MAX_UPLOAD_BYTES, saveImage, sniffImageMime } from "@/lib/storage";
 
 /** Foto de post é pra ver no celular, igual à foto de lugar. */
@@ -149,6 +152,125 @@ export async function deletePost(postId: string): Promise<FormState> {
   await db.delete(posts).where(eq(posts.id, post.id));
   // Só depois de a linha sumir é que o arquivo vira lixo.
   if (post.photoId) await deleteImage(post.photoId);
+
+  revalidatePath("/feed");
+  return { ok: true };
+}
+
+// --- Reações e comentários -----------------------------------------------------
+
+const BAD_EMOJI = "Esse emoji não existe por aqui.";
+const COMMENT_BODY_ERROR = `Escreve alguma coisa (até ${COMMENT_MAX} caracteres).`;
+const COMMENT_NOT_FOUND = "Comentário não encontrado.";
+const COMMENT_NOT_YOURS = "Esse comentário não é seu.";
+
+const commentSchema = z.object({
+  postId: z.string().trim().min(1, POST_NOT_FOUND),
+  body: z.string().trim().min(1, COMMENT_BODY_ERROR).max(COMMENT_MAX, COMMENT_BODY_ERROR),
+});
+
+async function findPost(postId: string) {
+  if (typeof postId !== "string" || postId === "") return null;
+  const rows = await db
+    .select({ id: posts.id, userId: posts.userId })
+    .from(posts)
+    .where(eq(posts.id, postId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Liga/desliga uma reação minha no post e devolve o estado novo daquele emoji. */
+export async function togglePostReaction(
+  postId: string,
+  emoji: string,
+): Promise<FormState & { reacted?: boolean; count?: number }> {
+  const { user } = await assertUser();
+
+  if (!isReactionEmoji(emoji)) return { ok: false, error: BAD_EMOJI };
+
+  const post = await findPost(postId);
+  if (!post) return { ok: false, error: POST_NOT_FOUND };
+
+  const mine = and(
+    eq(postReactions.postId, post.id),
+    eq(postReactions.userId, user.id),
+    eq(postReactions.emoji, emoji),
+  );
+
+  const existing = await db.query.postReactions.findFirst({ where: mine });
+
+  if (existing) {
+    await db.delete(postReactions).where(mine);
+  } else {
+    await db
+      .insert(postReactions)
+      .values({ postId: post.id, userId: user.id, emoji })
+      .onConflictDoNothing();
+  }
+
+  const counted = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(postReactions)
+    .where(and(eq(postReactions.postId, post.id), eq(postReactions.emoji, emoji)));
+
+  revalidatePath("/feed");
+  return { ok: true, reacted: !existing, count: Number(counted[0]?.count ?? 0) };
+}
+
+/** Comenta num post. Qualquer membro comenta qualquer post (nada é privado). */
+export async function addPostComment(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { user } = await assertUser();
+
+  const parsed = commentSchema.safeParse({
+    postId: field(formData, "postId"),
+    body: field(formData, "body"),
+  });
+  if (!parsed.success) return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) };
+  const data = parsed.data;
+
+  const post = await findPost(data.postId);
+  if (!post) return { ok: false, error: POST_NOT_FOUND };
+
+  await db.insert(postComments).values({
+    id: nanoid(12),
+    postId: post.id,
+    userId: user.id,
+    body: data.body,
+  });
+
+  revalidatePath("/feed");
+  return { ok: true };
+}
+
+/**
+ * Apaga o comentário. Quem escreveu, quem postou (é a thread do post) ou um admin
+ * (docs/05 — Permissões).
+ */
+export async function deletePostComment(commentId: string): Promise<FormState> {
+  const { user } = await assertUser();
+  if (typeof commentId !== "string" || commentId === "") {
+    return { ok: false, error: COMMENT_NOT_FOUND };
+  }
+
+  const rows = await db
+    .select({
+      id: postComments.id,
+      userId: postComments.userId,
+      postUserId: posts.userId,
+    })
+    .from(postComments)
+    .innerJoin(posts, eq(posts.id, postComments.postId))
+    .where(eq(postComments.id, commentId))
+    .limit(1);
+
+  const comment = rows[0];
+  if (!comment) return { ok: false, error: COMMENT_NOT_FOUND };
+
+  const allowed =
+    comment.userId === user.id || comment.postUserId === user.id || user.role === "admin";
+  if (!allowed) return { ok: false, error: COMMENT_NOT_YOURS };
+
+  await db.delete(postComments).where(eq(postComments.id, comment.id));
 
   revalidatePath("/feed");
   return { ok: true };

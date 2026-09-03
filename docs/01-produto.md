@@ -103,6 +103,7 @@ Regras do post:
 - Texto puro, até 1000 caracteres, com quebras de linha. Foto reprocessada pelo sharp (webp, sem EXIF), igual às fotos de lugar.
 - Post **fica pra sempre** na timeline. Quem apaga é quem postou (ou admin), e a imagem some junto.
 - Limite de 20 posts por hora por pessoa ("Calma, influencer."). Não é moderação: é pra ninguém entupir o feed sem querer.
+- Dá pra **reagir** (os mesmos emojis das avaliações) e **comentar** (thread curta, texto puro, até 500 caracteres) em qualquer post. Comentário some pela mão de quem escreveu, de quem postou ou do admin. Reação em post também vira linha nas novidades ("Fulano reagiu 😂 no post de Ciclano em X"); comentário não, fica só no card.
 
 ## Não-objetivos (de propósito)
 

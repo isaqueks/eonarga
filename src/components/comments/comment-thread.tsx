@@ -5,6 +5,7 @@ import { useActionState, useOptimistic, useRef, useState, useTransition } from "
 
 import { addComment, deleteComment } from "@/actions/comments";
 import { EMPTY_FORM_STATE } from "@/actions/form-state";
+import { addPostComment, deletePostComment } from "@/actions/posts";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/user-avatar";
@@ -12,8 +13,8 @@ import { COMMENT_MAX } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
- * Uma resposta pronta pra tela. O "há x" vem calculado do servidor (igual ao card da
- * avaliação): o relógio do cliente é outro e daria warning de hidratação.
+ * Um comentário pronto pra tela. O "há x" vem calculado do servidor (igual ao card):
+ * o relógio do cliente é outro e daria warning de hidratação.
  */
 export interface CommentView {
   id: string;
@@ -24,28 +25,55 @@ export interface CommentView {
   canDelete: boolean;
 }
 
-/** Quantas respostas aparecem antes do "ver todas". */
+/** Onde a thread mora: resposta numa avaliação ou comentário num post. */
+export type CommentTarget = { type: "review"; id: string } | { type: "post"; id: string };
+
+/** A mesma thread com a copy de cada casa: na avaliação é "resposta", no post é "comentário". */
+const COPY = {
+  review: {
+    field: "reviewId",
+    cta: "Responder",
+    label: "Sua resposta",
+    placeholder: "Discorda? Fala.",
+    confirm: "Apagar essa resposta? Não dá pra desfazer.",
+    deleteLabel: (author: string) => `Apagar resposta de ${author}`,
+  },
+  post: {
+    field: "postId",
+    cta: "Comentar",
+    label: "Seu comentário",
+    placeholder: "Comenta aí.",
+    confirm: "Apagar esse comentário? Não dá pra desfazer.",
+    deleteLabel: (author: string) => `Apagar comentário de ${author}`,
+  },
+} as const;
+
+/** Quantos comentários aparecem antes do "ver todos". */
 const PREVIEW = 3;
 
 const PENDING_ID = "__pending__";
 
 /**
- * Thread curta de uma avaliação. Otimista: a resposta aparece cinza enquanto o
- * servidor grava e é substituída pela de verdade quando a página revalida.
+ * Thread curta de uma avaliação ou de um post. Otimista: o comentário aparece cinza
+ * enquanto o servidor grava e é substituído pelo de verdade quando a página revalida.
  */
-export function ReviewComments({
-  reviewId,
+export function CommentThread({
+  target,
   comments,
   canReply = true,
   className,
 }: {
-  reviewId: string;
+  target: CommentTarget;
   comments: CommentView[];
   /** Lugar arquivado não recebe resposta nova; a thread antiga continua visível. */
   canReply?: boolean;
   className?: string;
 }) {
-  const [state, formAction, sending] = useActionState(addComment, EMPTY_FORM_STATE);
+  const copy = COPY[target.type];
+  const add = target.type === "review" ? addComment : addPostComment;
+  const del = target.type === "review" ? deleteComment : deletePostComment;
+
+  const [state, formAction, sending] = useActionState(add, EMPTY_FORM_STATE);
   const [optimistic, addOptimistic] = useOptimistic(comments, (current, body: string) => [
     ...current,
     {
@@ -75,10 +103,10 @@ export function ReviewComments({
   }
 
   function remove(id: string) {
-    if (!window.confirm("Apagar essa resposta? Não dá pra desfazer.")) return;
+    if (!window.confirm(copy.confirm)) return;
     setRemoveError(null);
     startRemoving(async () => {
-      const result = await deleteComment(id);
+      const result = await del(id);
       if (!result.ok) setRemoveError(result.error ?? "Não rolou apagar.");
     });
   }
@@ -91,7 +119,7 @@ export function ReviewComments({
           onClick={() => setExpanded(true)}
           className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 self-start rounded-md text-xs font-medium underline-offset-2 outline-none hover:underline focus-visible:ring-3"
         >
-          ver todas ({optimistic.length})
+          ver todos ({optimistic.length})
         </button>
       ) : null}
 
@@ -121,7 +149,7 @@ export function ReviewComments({
                     className="text-muted-foreground hover:text-destructive size-9 shrink-0"
                     onClick={() => remove(comment.id)}
                     disabled={removing}
-                    aria-label={`Apagar resposta de ${comment.authorName}`}
+                    aria-label={copy.deleteLabel(comment.authorName)}
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
@@ -149,7 +177,7 @@ export function ReviewComments({
           }}
           className="flex flex-col gap-1.5"
         >
-          <input type="hidden" name="reviewId" value={reviewId} />
+          <input type="hidden" name={copy.field} value={target.id} />
           <Textarea
             ref={textareaRef}
             name="body"
@@ -157,8 +185,8 @@ export function ReviewComments({
             maxLength={COMMENT_MAX}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Discorda? Fala."
-            aria-label="Sua resposta"
+            placeholder={copy.placeholder}
+            aria-label={copy.label}
             aria-invalid={state.fieldErrors?.body ? true : undefined}
             className="min-h-16 text-[0.9375rem]"
           />
@@ -199,7 +227,7 @@ export function ReviewComments({
           className="text-muted-foreground h-9 self-start"
         >
           <MessageCircle className="size-3.5" aria-hidden />
-          Responder
+          {copy.cta}
         </Button>
       )}
     </div>

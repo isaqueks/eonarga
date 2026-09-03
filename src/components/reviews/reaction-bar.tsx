@@ -2,12 +2,16 @@
 
 import { useState, useTransition } from "react";
 
+import { togglePostReaction } from "@/actions/posts";
 import { toggleReaction } from "@/actions/reviews";
-import type { ReactionSummary } from "@/lib/queries/reviews";
 import { REACTION_EMOJIS } from "@/lib/constants";
+import type { ReactionSummary } from "@/lib/queries/reviews";
 import { cn } from "@/lib/utils";
 
 type State = Record<string, { count: number; mine: boolean }>;
+
+/** Onde a reação cai: numa avaliação ou num post do feed. */
+export type ReactionTarget = { type: "review"; id: string } | { type: "post"; id: string };
 
 function toState(reactions: ReactionSummary[]): State {
   const out: State = {};
@@ -18,16 +22,23 @@ function toState(reactions: ReactionSummary[]): State {
   return out;
 }
 
+function toggleOn(target: ReactionTarget, emoji: string) {
+  return target.type === "review"
+    ? toggleReaction(target.id, emoji)
+    : togglePostReaction(target.id, emoji);
+}
+
 /**
- * Reações da avaliação. Otimista: pinta na hora e volta atrás se o servidor reclamar,
- * igual aos botões de status. Nada é privado — todo mundo vê a contagem (docs/01).
+ * Reações de uma avaliação ou de um post. Otimista: pinta na hora e volta atrás se o
+ * servidor reclamar, igual aos botões de status. Nada é privado — todo mundo vê a
+ * contagem (docs/01).
  */
 export function ReactionBar({
-  reviewId,
+  target,
   reactions,
   className,
 }: {
-  reviewId: string;
+  target: ReactionTarget;
   reactions: ReactionSummary[];
   className?: string;
 }) {
@@ -51,7 +62,7 @@ export function ReactionBar({
     setError(null);
 
     startTransition(async () => {
-      const result = await toggleReaction(reviewId, emoji);
+      const result = await toggleOn(target, emoji);
       if (!result.ok) {
         setState((previous) => ({ ...previous, [emoji]: current }));
         setError(result.error ?? "Não rolou reagir. Tenta de novo.");

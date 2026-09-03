@@ -456,6 +456,49 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await expect(cardTexto).toBeVisible({ timeout: 30_000 });
   await expect(cardTexto.getByRole("link", { name: /Sebo do João/ })).toBeVisible();
 
+  // --- Reagir e comentar no post -------------------------------------------
+  // Os botões só respondem depois da hidratação: repete até o aria-pressed virar.
+  const fogo = cardTexto.getByRole("button", { name: /^Reagir com 🔥/ });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await fogo.click();
+    try {
+      await expect(fogo).toHaveAttribute("aria-pressed", "true", { timeout: 3_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  await expect(cardTexto.getByRole("button", { name: "Reagir com 🔥 (1)" })).toBeVisible();
+
+  const comentar = cardTexto.getByRole("button", { name: "Comentar" });
+  const campo = cardTexto.getByLabel("Seu comentário");
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await comentar.click();
+    try {
+      await expect(campo).toBeVisible({ timeout: 3_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  await campo.fill("Segura uma pra mim");
+  await cardTexto.getByRole("button", { name: "Enviar" }).click();
+  await expect(cardTexto.locator("p", { hasText: "Segura uma pra mim" })).toBeVisible();
+  // O comentário de verdade (com o "Apagar") chega quando a página revalida.
+  await expect(cardTexto.getByRole("button", { name: "Apagar comentário de Admin" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await shot(page, "20b-post-reacao-e-comentario");
+
+  // A reação vira linha nas novidades e tudo sobrevive a um reload.
+  await page.reload();
+  await expect(cardTexto.getByRole("button", { name: "Reagir com 🔥 (1)" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(cardTexto.locator("p", { hasText: "Segura uma pra mim" })).toBeVisible();
+  await expect(page.getByText(/Admin reagiu .*no post de Admin/)).toBeVisible();
+
   // --- Post 2: só foto, com a posição marcada no mapa -----------------------
   await page.getByText("📸 Postar").click();
   await expect(page).toHaveURL(/\/feed\/novo$/);

@@ -1,8 +1,10 @@
-import { asc, desc, eq, lt } from "drizzle-orm";
+import { asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 
+import { REACTION_EMOJIS } from "@/lib/constants";
 import { db } from "@/lib/db/client";
-import { categories, places, posts, users } from "@/lib/db/schema";
+import { categories, places, postComments, postReactions, posts, users } from "@/lib/db/schema";
 import type { PersonRef } from "@/lib/queries/places";
+import type { ReactionSummary } from "@/lib/queries/reviews";
 
 export interface PostPhoto {
   id: string;
@@ -23,6 +25,16 @@ export interface PostPlaceRef {
   emoji: string;
 }
 
+/** Um comentário no post, pronto pro card. */
+export interface PostCommentItem {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: PersonRef;
+  /** Quem comentou, quem postou (é a thread do post) ou admin (docs/05 — Permissões). */
+  canDelete: boolean;
+}
+
 export interface PostItem {
   id: string;
   body: string | null;
@@ -35,6 +47,10 @@ export interface PostItem {
   createdAt: string;
   /** Autor do post ou admin (docs/05). */
   canDelete: boolean;
+  /** Só emojis com pelo menos uma reação, na ordem de `REACTION_EMOJIS`. */
+  reactions: ReactionSummary[];
+  /** Comentários do mais antigo pro mais novo. */
+  comments: PostCommentItem[];
 }
 
 export interface PostViewer {
@@ -96,7 +112,99 @@ type PostRow = {
   authorAvatarId: string | null;
 };
 
-function toItem(row: PostRow, viewer: PostViewer | null): PostItem {
+const EMOJI_ORDER = new Map<string, number>(REACTION_EMOJIS.map((emoji, i) => [emoji, i]));
+
+/**
+ * Reações de vários posts de uma vez, agrupadas por emoji, com o "eu já reagi" de quem
+ * está olhando. Sem viewer (link público, por exemplo) ninguém "já reagiu".
+ */
+async function loadReactions(postIds: string[], viewerId: string | null) {
+  const byPost = new Map<string, ReactionSummary[]>();
+  if (postIds.length === 0) return byPost;
+
+  const rows = await db
+    .select({
+      postId: postReactions.postId,
+      emoji: postReactions.emoji,
+      count: sql<number>`count(*)`,
+      mine: viewerId
+        ? sql<number>`sum(case when ${postReactions.userId} = ${viewerId} then 1 else 0 end)`
+        : sql<number>`0`,
+    })
+    .from(postReactions)
+    .where(inArray(postReactions.postId, postIds))
+    .groupBy(postReactions.postId, postReactions.emoji);
+
+  for (const row of rows) {
+    // Emoji que saiu da lista fixa (ou nunca esteve nela) não aparece.
+    if (!EMOJI_ORDER.has(row.emoji)) continue;
+    const summary: ReactionSummary = {
+      emoji: row.emoji,
+      count: Number(row.count),
+      mine: Number(row.mine) > 0,
+    };
+    const list = byPost.get(row.postId);
+    if (list) list.push(summary);
+    else byPost.set(row.postId, [summary]);
+  }
+
+  for (const list of byPost.values()) {
+    list.sort((a, b) => (EMOJI_ORDER.get(a.emoji) ?? 0) - (EMOJI_ORDER.get(b.emoji) ?? 0));
+  }
+
+  return byPost;
+}
+
+/**
+ * Comentários de vários posts de uma vez, em ordem cronológica, com o autor do post
+ * junto pra resolver o `canDelete` sem outra ida ao banco.
+ */
+async function loadComments(postIds: string[], viewer: PostViewer | null) {
+  const byPost = new Map<string, PostCommentItem[]>();
+  if (postIds.length === 0) return byPost;
+
+  const rows = await db
+    .select({
+      id: postComments.id,
+      postId: postComments.postId,
+      body: postComments.body,
+      createdAt: postComments.createdAt,
+      authorId: users.id,
+      authorName: users.name,
+      authorAvatarId: users.avatarId,
+      postAuthorId: posts.userId,
+    })
+    .from(postComments)
+    .innerJoin(users, eq(users.id, postComments.userId))
+    .innerJoin(posts, eq(posts.id, postComments.postId))
+    .where(inArray(postComments.postId, postIds))
+    // Empate no milissegundo desempatado pelo id, pra a ordem não dançar entre renders.
+    .orderBy(asc(postComments.createdAt), asc(postComments.id));
+
+  for (const row of rows) {
+    const item: PostCommentItem = {
+      id: row.id,
+      body: row.body,
+      createdAt: row.createdAt,
+      author: { id: row.authorId, name: row.authorName, avatarId: row.authorAvatarId },
+      canDelete:
+        viewer !== null &&
+        (viewer.role === "admin" || viewer.id === row.authorId || viewer.id === row.postAuthorId),
+    };
+    const list = byPost.get(row.postId);
+    if (list) list.push(item);
+    else byPost.set(row.postId, [item]);
+  }
+
+  return byPost;
+}
+
+function toItem(
+  row: PostRow,
+  viewer: PostViewer | null,
+  reactions: ReactionSummary[],
+  comments: PostCommentItem[],
+): PostItem {
   return {
     id: row.id,
     body: row.body,
@@ -124,7 +232,21 @@ function toItem(row: PostRow, viewer: PostViewer | null): PostItem {
     author: { id: row.authorId, name: row.authorName, avatarId: row.authorAvatarId },
     createdAt: row.createdAt,
     canDelete: viewer !== null && (viewer.role === "admin" || viewer.id === row.authorId),
+    reactions,
+    comments,
   };
+}
+
+/** Completa as linhas com reações e comentários: duas queries pra lista inteira. */
+async function hydrate(rows: PostRow[], viewer: PostViewer | null): Promise<PostItem[]> {
+  const ids = rows.map((row) => row.id);
+  const [reactions, comments] = await Promise.all([
+    loadReactions(ids, viewer?.id ?? null),
+    loadComments(ids, viewer),
+  ]);
+  return rows.map((row) =>
+    toItem(row, viewer, reactions.get(row.id) ?? [], comments.get(row.id) ?? []),
+  );
 }
 
 /** Posts do grupo, do mais novo pro mais velho. */
@@ -149,7 +271,7 @@ export async function listPosts(
     .orderBy(desc(posts.createdAt), desc(posts.id))
     .limit(limit)) as PostRow[];
 
-  return rows.map((row) => toItem(row, viewer));
+  return hydrate(rows, viewer);
 }
 
 /** Um post pelo id (usado pelo delete e por quem precisa conferir permissão). */
@@ -165,8 +287,8 @@ export async function getPost(id: string, viewer: PostViewer | null): Promise<Po
     .where(eq(posts.id, id))
     .limit(1)) as PostRow[];
 
-  const row = rows[0];
-  return row ? toItem(row, viewer) : null;
+  const [item] = await hydrate(rows, viewer);
+  return item ?? null;
 }
 
 /** O que a tela de postar precisa saber de cada lugar ativo pra lista e pro "você tá no X?". */

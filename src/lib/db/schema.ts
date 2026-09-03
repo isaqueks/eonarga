@@ -282,6 +282,47 @@ export const posts = sqliteTable(
   (t) => [index("posts_created_idx").on(t.createdAt), index("posts_user_idx").on(t.userId)],
 );
 
+/**
+ * Reações num post do feed: a mesma lista fixa de emojis das avaliações
+ * (`REACTION_EMOJIS`). Some junto com o post e com quem reagiu.
+ */
+export const postReactions = sqliteTable(
+  "post_reactions",
+  {
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.postId, t.userId, t.emoji] })],
+);
+
+/**
+ * Comentários num post: thread curta, sem aninhamento, igual às respostas de
+ * avaliação. Some junto com o post e com quem escreveu.
+ */
+export const postComments = sqliteTable(
+  "post_comments",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Texto puro, no máximo COMMENT_MAX caracteres (validado na action).
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("post_comments_post_idx").on(t.postId)],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   places: many(places),
@@ -337,9 +378,21 @@ export const placeTagsRelations = relations(placeTags, ({ one }) => ({
   creator: one(users, { fields: [placeTags.createdBy], references: [users.id] }),
 }));
 
-export const postsRelations = relations(posts, ({ one }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   author: one(users, { fields: [posts.userId], references: [users.id] }),
   place: one(places, { fields: [posts.placeId], references: [places.id] }),
+  reactions: many(postReactions),
+  comments: many(postComments),
+}));
+
+export const postReactionsRelations = relations(postReactions, ({ one }) => ({
+  post: one(posts, { fields: [postReactions.postId], references: [posts.id] }),
+  user: one(users, { fields: [postReactions.userId], references: [users.id] }),
+}));
+
+export const postCommentsRelations = relations(postComments, ({ one }) => ({
+  post: one(posts, { fields: [postComments.postId], references: [posts.id] }),
+  author: one(users, { fields: [postComments.userId], references: [users.id] }),
 }));
 
 export const photosRelations = relations(photos, ({ one }) => ({

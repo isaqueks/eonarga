@@ -38,6 +38,8 @@ const T = {
   aviso: "2026-08-12T10:00:00.000Z",
   postFoto: "2026-08-03T12:00:00.000Z",
   postSebo: "2026-08-09T12:00:00.000Z",
+  reacaoPost: "2026-08-13T10:00:00.000Z",
+  comentarioPost: "2026-08-09T13:00:00.000Z",
 };
 
 beforeAll(async () => {
@@ -177,6 +179,22 @@ beforeAll(async () => {
     },
   ]);
 
+  await db
+    .insert(schema.postReactions)
+    .values([{ postId: "post-sebo", userId: CADU.id, emoji: "😂", createdAt: T.reacaoPost }]);
+
+  // Comentário não vira evento do feed: aparece dentro do card do post.
+  await db.insert(schema.postComments).values([
+    {
+      id: "com-bia",
+      postId: "post-sebo",
+      userId: BIA.id,
+      body: "Bora",
+      createdAt: T.comentarioPost,
+      updatedAt: T.comentarioPost,
+    },
+  ]);
+
   await db.insert(schema.notifications).values([
     {
       id: "notif-chamada",
@@ -223,11 +241,12 @@ afterAll(() => {
 });
 
 describe("listFeed", () => {
-  it("junta os seis tipos de evento, do mais novo pro mais velho", async () => {
+  it("junta os sete tipos de evento, do mais novo pro mais velho", async () => {
     const events = await feed.listFeed();
 
     expect(events.map((e) => e.at)).toEqual([...events.map((e) => e.at)].sort().reverse());
     expect(events.map((e) => `${e.kind}@${e.at}`)).toEqual([
+      `post_reaction@${T.reacaoPost}`,
       `call@${T.chamada}`,
       `post@${T.postSebo}`,
       `reaction@${T.reacao}`,
@@ -271,6 +290,15 @@ describe("listFeed", () => {
       reviewAuthor: "Ana",
     });
 
+    expect(byKind("post_reaction")[0]).toMatchObject({
+      at: T.reacaoPost,
+      user: { id: CADU.id, name: "Cadu" },
+      place: { slug: "sebo-do-joao", name: "Sebo do João", emoji: "📚" },
+      emoji: "😂",
+      postId: "post-sebo",
+      postAuthor: "Ana",
+    });
+
     expect(byKind("call")[0]).toMatchObject({
       at: T.chamada,
       user: { id: BIA.id, name: "Bia", avatarId: null },
@@ -302,6 +330,10 @@ describe("listFeed", () => {
         place: { id: SEBO, slug: "sebo-do-joao", name: "Sebo do João", emoji: "📚" },
         author: { id: ANA.id, name: "Ana" },
         canDelete: false,
+        reactions: [{ emoji: "😂", count: 1, mine: false }],
+        comments: [
+          { id: "com-bia", body: "Bora", author: { id: BIA.id, name: "Bia" }, canDelete: false },
+        ],
       },
     });
 
@@ -318,6 +350,28 @@ describe("listFeed", () => {
         height: 180,
       },
     });
+  });
+
+  it("marca a reação de quem está olhando e quem pode apagar cada comentário", async () => {
+    const post = async (viewer: { id: string; role: "admin" | "member" }) => {
+      const event = (await feed.listFeed({ viewer })).find(
+        (e) => e.kind === "post" && e.post.id === "post-sebo",
+      );
+      if (!event || event.kind !== "post") throw new Error("post-sebo sumiu do feed");
+      return event.post;
+    };
+
+    // Cadu reagiu; pra ele é "minha", pros outros não.
+    expect((await post({ id: CADU.id, role: "member" })).reactions).toEqual([
+      { emoji: "😂", count: 1, mine: true },
+    ]);
+    expect((await post({ id: BIA.id, role: "member" })).reactions[0].mine).toBe(false);
+
+    // O comentário é da Bia, no post da Ana: as duas apagam, o Cadu (membro) não, admin sim.
+    expect((await post({ id: BIA.id, role: "member" })).comments[0].canDelete).toBe(true);
+    expect((await post({ id: ANA.id, role: "member" })).comments[0].canDelete).toBe(true);
+    expect((await post({ id: CADU.id, role: "member" })).comments[0].canDelete).toBe(false);
+    expect((await post({ id: CADU.id, role: "admin" })).comments[0].canDelete).toBe(true);
   });
 
   it("só deixa apagar o próprio post — admin apaga qualquer um", async () => {
@@ -346,32 +400,32 @@ describe("listFeed", () => {
     const events = await feed.listFeed();
 
     // Post é da pessoa, não do lugar, e não tem `place` de evento: fica de fora da conta.
-    expect(events.some((e) => e.kind !== "post" && e.place.slug === "lugar-morto")).toBe(false);
-    expect(events).toHaveLength(10);
+    expect(events.some((e) => e.kind !== "post" && e.place?.slug === "lugar-morto")).toBe(false);
+    expect(events).toHaveLength(11);
   });
 
   it("respeita o limite", async () => {
     const events = await feed.listFeed({ limit: 3 });
 
     expect(events).toHaveLength(3);
-    expect(events[0].kind).toBe("call");
-    expect(events[2].at).toBe(T.reacao);
+    expect(events[0].kind).toBe("post_reaction");
+    expect(events[2].at).toBe(T.postSebo);
   });
 
   it("pagina com o cursor `before`, com post entrando na conta", async () => {
     const primeira = await feed.listFeed({ limit: 3 });
-    expect(primeira.map((e) => e.at)).toEqual([T.chamada, T.postSebo, T.reacao]);
+    expect(primeira.map((e) => e.at)).toEqual([T.reacaoPost, T.chamada, T.postSebo]);
 
     const segunda = await feed.listFeed({ limit: 3, before: primeira[2].at });
     expect(segunda).toHaveLength(3);
     expect(segunda.every((e) => e.at < primeira[2].at)).toBe(true);
-    expect(segunda.map((e) => e.at)).toEqual([T.jaFui, T.querIr, T.notaCadu]);
+    expect(segunda.map((e) => e.at)).toEqual([T.reacao, T.jaFui, T.querIr]);
 
     const terceira = await feed.listFeed({ limit: 3, before: segunda[2].at });
-    expect(terceira.map((e) => e.at)).toEqual([T.notaAna, T.postFoto, T.barCriado]);
+    expect(terceira.map((e) => e.at)).toEqual([T.notaCadu, T.notaAna, T.postFoto]);
 
     const quarta = await feed.listFeed({ limit: 3, before: terceira[2].at });
-    expect(quarta.map((e) => e.at)).toEqual([T.seboCriado]);
+    expect(quarta.map((e) => e.at)).toEqual([T.barCriado, T.seboCriado]);
 
     expect(await feed.listFeed({ before: T.seboCriado })).toEqual([]);
   });

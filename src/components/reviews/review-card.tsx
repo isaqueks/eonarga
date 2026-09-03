@@ -1,3 +1,4 @@
+import { CommentThread, type CommentView } from "@/components/comments/comment-thread";
 import { UserAvatar } from "@/components/user-avatar";
 import { formatDayMonth, relativeFromNow } from "@/lib/dates";
 import type { ReviewItem } from "@/lib/queries/reviews";
@@ -5,7 +6,6 @@ import { cn } from "@/lib/utils";
 
 import { NargaStars } from "./narga-stars";
 import { ReactionBar } from "./reaction-bar";
-import { ReviewComments, type CommentView } from "./review-comments";
 import { ReviewContent } from "./review-content";
 import { ReviewMenu } from "./review-menu";
 
@@ -75,10 +75,14 @@ export function ReviewCard({
 
       <ReviewContent html={review.contentHtml} />
 
-      <ReactionBar reviewId={review.id} reactions={review.reactions} className="pt-1" />
+      <ReactionBar
+        target={{ type: "review", id: review.id }}
+        reactions={review.reactions}
+        className="pt-1"
+      />
 
-      <ReviewComments
-        reviewId={review.id}
+      <CommentThread
+        target={{ type: "review", id: review.id }}
         comments={comments}
         canReply={canEdit}
         className="border-border/60 border-t pt-2"

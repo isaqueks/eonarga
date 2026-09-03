@@ -133,6 +133,8 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 
 - [x] Botão fixo "Instalar aplicativo" na home e no feed pra celular sem o PWA (substitui o banner da 2ª visita)
 
+- [x] Reações e comentários em posts (migration 0007): `post_reactions` / `post_comments`, `togglePostReaction` / `addPostComment` / `deletePostComment` em `actions/posts.ts`, `ReactionBar` e `CommentThread` genéricos (avaliação ou post), reação em post como linha do feed, testes do `listFeed` e e2e
+
 ## Definição de pronto (qualquer tarefa)
 
 - Funciona no celular (Chrome Android e Safari iOS) e no desktop

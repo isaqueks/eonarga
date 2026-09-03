@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { CommentThread, type CommentView } from "@/components/comments/comment-thread";
 import { mapsSearchUrl } from "@/components/places/maps-buttons";
+import { ReactionBar } from "@/components/reviews/reaction-bar";
 import { UserAvatar } from "@/components/user-avatar";
 import { relativeFromNow } from "@/lib/dates";
 import { formatLatLng } from "@/lib/posts";
@@ -12,10 +14,20 @@ import { PostPhoto } from "./post-photo";
 
 /**
  * Um post no feed. Server component: o "há 5 min" é calculado uma vez, no servidor,
- * e não desanda na hidratação. Só a foto em tela cheia e o menu "⋯" são cliente.
+ * e não desanda na hidratação. Só a foto em tela cheia, o menu "⋯", as reações e
+ * a thread de comentários são cliente.
  */
 export function PostCard({ post, className }: { post: PostItem; className?: string }) {
   const when = relativeFromNow(post.createdAt);
+  // O "há x" de cada comentário sai daqui, do servidor, pelo mesmo motivo do de cima.
+  const comments: CommentView[] = post.comments.map((comment) => ({
+    id: comment.id,
+    body: comment.body,
+    when: relativeFromNow(comment.createdAt),
+    authorName: comment.author.name,
+    authorAvatarId: comment.author.avatarId,
+    canDelete: comment.canDelete,
+  }));
 
   return (
     <article
@@ -45,6 +57,18 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
       {post.body ? (
         <p className="text-[0.9375rem] leading-snug whitespace-pre-line">{post.body}</p>
       ) : null}
+
+      <ReactionBar
+        target={{ type: "post", id: post.id }}
+        reactions={post.reactions}
+        className="pt-1"
+      />
+
+      <CommentThread
+        target={{ type: "post", id: post.id }}
+        comments={comments}
+        className="border-border/60 border-t pt-2"
+      />
     </article>
   );
 }

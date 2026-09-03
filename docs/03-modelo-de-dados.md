@@ -19,6 +19,10 @@ erDiagram
   reviews ||--o{ photos : ilustra
   users ||--o{ posts : postou
   places ||--o{ posts : sedia
+  users ||--o{ post_reactions : reage
+  posts ||--o{ post_reactions : recebe
+  users ||--o{ post_comments : comenta
+  posts ||--o{ post_comments : tem
 ```
 
 ## Tabelas
@@ -146,6 +150,15 @@ Post do feed (docs/01 — Feed): foto e/ou texto, sempre com quem postou e de on
 | created_at, updated_at    | text                 |                                                      |
 
 Índices em `created_at` (a ordem do feed) e `user_id`. As regras "tem `body` **ou** `photo_id`" e "com `place_id`, `lat/lng` são os do lugar" ficam na action (`src/actions/posts.ts`), não no banco. A foto usa os mesmos arquivos do storage das outras (`{id}.webp` / `{id}.thumb.webp`) e é apagada junto com a linha.
+
+### post_reactions e post_comments
+
+O mesmo desenho de `review_reactions` / `review_comments`, apontando pra `posts` (migration 0007):
+
+- `post_reactions`: PK `(post_id, user_id, emoji)`, emojis da mesma lista fixa, `created_at`. Cascade no post e na pessoa.
+- `post_comments`: `id` (`nanoid(12)`), `post_id`, `user_id`, `body` (texto puro, até 500), `created_at`, `updated_at`; índice em `post_id`. Cascade no post e na pessoa.
+
+Quem apaga um comentário: quem escreveu, quem postou ou admin (resolvido na query, com o `user_id` do post junto).
 
 ## Ranking
 

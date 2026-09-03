@@ -6,6 +6,8 @@ import {
   categories,
   notifications,
   places,
+  postReactions,
+  posts,
   reviewReactions,
   reviews,
   userPlaceStatus,
@@ -51,6 +53,17 @@ export type FeedEvent =
     }
   /** "Chamar galera pra cá" (src/actions/push.ts): fica no feed mesmo pra quem não usa push. */
   | { kind: "call"; at: string; user: PersonRef; place: FeedPlaceRef }
+  /** Reação num post do feed. `place` é null quando o post foi de um ponto solto. */
+  | {
+      kind: "post_reaction";
+      at: string;
+      user: PersonRef;
+      place: FeedPlaceRef | null;
+      emoji: string;
+      postId: string;
+      /** Nome de quem postou. */
+      postAuthor: string;
+    }
   /** Post do feed: foto e/ou texto, com quem postou e de onde (docs/01 — Feed). */
   | { kind: "post"; at: string; user: PersonRef; post: PostItem };
 
@@ -79,6 +92,8 @@ export function feedEventKey(event: FeedEvent): string {
     // A mesma pessoa chama o mesmo lugar mais de uma vez (em dias diferentes): entra a hora.
     case "call":
       return `call:${event.user.id}:${event.place.slug}:${event.at}`;
+    case "post_reaction":
+      return `post-reaction:${event.user.id}:${event.postId}:${event.emoji}`;
     case "post":
       return `post:${event.post.id}`;
   }
@@ -108,9 +123,10 @@ function toPerson(row: PersonRow): PersonRef {
 }
 
 /**
- * Novidades do grupo: post, avaliação, lugar novo, "quero ir"/"já fui", reação e chamada.
+ * Novidades do grupo: post, avaliação, lugar novo, "quero ir"/"já fui", reação (em
+ * avaliação ou em post) e chamada.
  *
- * São seis queries independentes (uma por tipo), cada uma já limitada e
+ * São sete queries independentes (uma por tipo), cada uma já limitada e
  * ordenada no banco; o merge é em memória. Uma UNION daria a mesma coisa com
  * colunas que só existem pra um dos tipos — não compensa.
  *
@@ -127,92 +143,120 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
 
   const reactor = alias(users, "reactor");
   const reviewAuthor = alias(users, "review_author");
+  const postAuthor = alias(users, "post_author");
 
-  const [reviewRows, placeRows, statusRows, reactionRows, callRows, postItems] = await Promise.all([
-    db
-      .select({
-        ...person,
-        ...placeRef,
-        at: reviews.createdAt,
-        reviewId: reviews.id,
-        rating: reviews.rating,
-        verdict: reviews.verdict,
-        contentHtml: reviews.contentHtml,
-        visitedAt: reviews.visitedAt,
-      })
-      .from(reviews)
-      .innerJoin(users, eq(users.id, reviews.userId))
-      .innerJoin(places, eq(places.id, reviews.placeId))
-      .innerJoin(categories, eq(categories.id, places.categoryId))
-      .where(and(eq(places.status, "active"), olderThan(reviews.createdAt)))
-      .orderBy(desc(reviews.createdAt))
-      .limit(limit),
+  const [reviewRows, placeRows, statusRows, reactionRows, postReactionRows, callRows, postItems] =
+    await Promise.all([
+      db
+        .select({
+          ...person,
+          ...placeRef,
+          at: reviews.createdAt,
+          reviewId: reviews.id,
+          rating: reviews.rating,
+          verdict: reviews.verdict,
+          contentHtml: reviews.contentHtml,
+          visitedAt: reviews.visitedAt,
+        })
+        .from(reviews)
+        .innerJoin(users, eq(users.id, reviews.userId))
+        .innerJoin(places, eq(places.id, reviews.placeId))
+        .innerJoin(categories, eq(categories.id, places.categoryId))
+        .where(and(eq(places.status, "active"), olderThan(reviews.createdAt)))
+        .orderBy(desc(reviews.createdAt))
+        .limit(limit),
 
-    db
-      .select({ ...person, ...placeRef, at: places.createdAt })
-      .from(places)
-      .innerJoin(users, eq(users.id, places.createdBy))
-      .innerJoin(categories, eq(categories.id, places.categoryId))
-      .where(and(eq(places.status, "active"), olderThan(places.createdAt)))
-      .orderBy(desc(places.createdAt))
-      .limit(limit),
+      db
+        .select({ ...person, ...placeRef, at: places.createdAt })
+        .from(places)
+        .innerJoin(users, eq(users.id, places.createdBy))
+        .innerJoin(categories, eq(categories.id, places.categoryId))
+        .where(and(eq(places.status, "active"), olderThan(places.createdAt)))
+        .orderBy(desc(places.createdAt))
+        .limit(limit),
 
-    db
-      .select({
-        ...person,
-        ...placeRef,
-        at: userPlaceStatus.updatedAt,
-        status: userPlaceStatus.status,
-      })
-      .from(userPlaceStatus)
-      .innerJoin(users, eq(users.id, userPlaceStatus.userId))
-      .innerJoin(places, eq(places.id, userPlaceStatus.placeId))
-      .innerJoin(categories, eq(categories.id, places.categoryId))
-      .where(and(eq(places.status, "active"), olderThan(userPlaceStatus.updatedAt)))
-      .orderBy(desc(userPlaceStatus.updatedAt))
-      .limit(limit),
+      db
+        .select({
+          ...person,
+          ...placeRef,
+          at: userPlaceStatus.updatedAt,
+          status: userPlaceStatus.status,
+        })
+        .from(userPlaceStatus)
+        .innerJoin(users, eq(users.id, userPlaceStatus.userId))
+        .innerJoin(places, eq(places.id, userPlaceStatus.placeId))
+        .innerJoin(categories, eq(categories.id, places.categoryId))
+        .where(and(eq(places.status, "active"), olderThan(userPlaceStatus.updatedAt)))
+        .orderBy(desc(userPlaceStatus.updatedAt))
+        .limit(limit),
 
-    db
-      .select({
-        id: reactor.id,
-        name: reactor.name,
-        avatarId: reactor.avatarId,
-        ...placeRef,
-        at: reviewReactions.createdAt,
-        emoji: reviewReactions.emoji,
-        authorName: reviewAuthor.name,
-      })
-      .from(reviewReactions)
-      .innerJoin(reactor, eq(reactor.id, reviewReactions.userId))
-      .innerJoin(reviews, eq(reviews.id, reviewReactions.reviewId))
-      .innerJoin(reviewAuthor, eq(reviewAuthor.id, reviews.userId))
-      .innerJoin(places, eq(places.id, reviews.placeId))
-      .innerJoin(categories, eq(categories.id, places.categoryId))
-      .where(and(eq(places.status, "active"), olderThan(reviewReactions.createdAt)))
-      .orderBy(desc(reviewReactions.createdAt))
-      .limit(limit),
+      db
+        .select({
+          id: reactor.id,
+          name: reactor.name,
+          avatarId: reactor.avatarId,
+          ...placeRef,
+          at: reviewReactions.createdAt,
+          emoji: reviewReactions.emoji,
+          authorName: reviewAuthor.name,
+        })
+        .from(reviewReactions)
+        .innerJoin(reactor, eq(reactor.id, reviewReactions.userId))
+        .innerJoin(reviews, eq(reviews.id, reviewReactions.reviewId))
+        .innerJoin(reviewAuthor, eq(reviewAuthor.id, reviews.userId))
+        .innerJoin(places, eq(places.id, reviews.placeId))
+        .innerJoin(categories, eq(categories.id, places.categoryId))
+        .where(and(eq(places.status, "active"), olderThan(reviewReactions.createdAt)))
+        .orderBy(desc(reviewReactions.createdAt))
+        .limit(limit),
 
-    // Aviso do admin (`kind = "admin"`) não é novidade do grupo e fica de fora; o
-    // innerJoin com places já derruba as linhas sem lugar.
-    db
-      .select({ ...person, ...placeRef, at: notifications.createdAt })
-      .from(notifications)
-      .innerJoin(users, eq(users.id, notifications.createdBy))
-      .innerJoin(places, eq(places.id, notifications.placeId))
-      .innerJoin(categories, eq(categories.id, places.categoryId))
-      .where(
-        and(
-          eq(notifications.kind, "call"),
-          eq(places.status, "active"),
-          olderThan(notifications.createdAt),
-        ),
-      )
-      .orderBy(desc(notifications.createdAt))
-      .limit(limit),
+      // Reação em post: o post não depende de lugar, então o join com places é left. O
+      // lugar só entra na linha se ainda estiver ativo (senão o link levaria a um 404).
+      db
+        .select({
+          id: reactor.id,
+          name: reactor.name,
+          avatarId: reactor.avatarId,
+          placeSlug: places.slug,
+          placeName: places.name,
+          placeEmoji: categories.emoji,
+          placeStatus: places.status,
+          at: postReactions.createdAt,
+          emoji: postReactions.emoji,
+          postId: posts.id,
+          authorName: postAuthor.name,
+        })
+        .from(postReactions)
+        .innerJoin(reactor, eq(reactor.id, postReactions.userId))
+        .innerJoin(posts, eq(posts.id, postReactions.postId))
+        .innerJoin(postAuthor, eq(postAuthor.id, posts.userId))
+        .leftJoin(places, eq(places.id, posts.placeId))
+        .leftJoin(categories, eq(categories.id, places.categoryId))
+        .where(olderThan(postReactions.createdAt))
+        .orderBy(desc(postReactions.createdAt))
+        .limit(limit),
 
-    // Post não depende de lugar: quem posta sempre manda a coordenada junto.
-    listPosts(opts.viewer ?? null, { limit, before }),
-  ]);
+      // Aviso do admin (`kind = "admin"`) não é novidade do grupo e fica de fora; o
+      // innerJoin com places já derruba as linhas sem lugar.
+      db
+        .select({ ...person, ...placeRef, at: notifications.createdAt })
+        .from(notifications)
+        .innerJoin(users, eq(users.id, notifications.createdBy))
+        .innerJoin(places, eq(places.id, notifications.placeId))
+        .innerJoin(categories, eq(categories.id, places.categoryId))
+        .where(
+          and(
+            eq(notifications.kind, "call"),
+            eq(places.status, "active"),
+            olderThan(notifications.createdAt),
+          ),
+        )
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit),
+
+      // Post não depende de lugar: quem posta sempre manda a coordenada junto.
+      listPosts(opts.viewer ?? null, { limit, before }),
+    ]);
 
   const events: FeedEvent[] = [
     ...reviewRows.map((row): FeedEvent => ({
@@ -246,6 +290,18 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
       place: toPlace(row),
       emoji: row.emoji,
       reviewAuthor: row.authorName,
+    })),
+    ...postReactionRows.map((row): FeedEvent => ({
+      kind: "post_reaction",
+      at: row.at,
+      user: toPerson(row),
+      place:
+        row.placeSlug && row.placeName && row.placeStatus === "active"
+          ? { slug: row.placeSlug, name: row.placeName, emoji: row.placeEmoji ?? "📍" }
+          : null,
+      emoji: row.emoji,
+      postId: row.postId,
+      postAuthor: row.authorName,
     })),
     ...callRows.map((row): FeedEvent => ({
       kind: "call",

@@ -166,6 +166,20 @@ function EventText({ event }: { event: LineEvent }) {
         </>
       );
 
+    case "post_reaction":
+      return (
+        <>
+          <Who name={event.user.name} /> reagiu <span aria-hidden>{event.emoji}</span> no post de{" "}
+          {event.postAuthor}
+          {event.place ? (
+            <>
+              {" "}
+              em <PlaceLink place={event.place} />
+            </>
+          ) : null}
+        </>
+      );
+
     case "call":
       return (
         <>
