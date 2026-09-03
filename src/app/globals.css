@@ -52,6 +52,19 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Reflexo do botão "Instalar aplicativo": atravessa da esquerda pra direita e
+     descansa a maior parte do ciclo. */
+  --animate-shine: shine 3.6s ease-in-out infinite;
+  @keyframes shine {
+    0%,
+    55% {
+      transform: translateX(-160%) skewX(-20deg);
+    }
+    100% {
+      transform: translateX(420%) skewX(-20deg);
+    }
+  }
 }
 
 /* Tema claro (existe, mas escuro é o padrão: o next-themes põe `.dark` no <html>) */

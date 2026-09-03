@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 import {
   consumeDeferredPrompt,
@@ -60,6 +61,9 @@ function subscribeNothing() {
  * "Instalar aplicativo": fica sempre visível no celular enquanto o app não estiver
  * instalado (docs/08 #32). Android/Chrome usa o prompt nativo quando o navegador
  * ofereceu um; senão (e no iOS, que nunca oferece) abre as instruções.
+ *
+ * É pra chamar atenção mesmo: preenchido no âmbar do app, com brilho e um reflexo
+ * que passa de tempos em tempos (só sem `prefers-reduced-motion`).
  */
 export function InstallAppButton({ className }: { className?: string }) {
   const platform = useSyncExternalStore(subscribeNothing, getPlatform, () => null);
@@ -82,23 +86,34 @@ export function InstallAppButton({ className }: { className?: string }) {
 
   if (!platform || installed) return null;
 
+  const Icon = deferred ? Download : Smartphone;
+
   return (
     <>
       <Button
         size="lg"
-        variant="outline"
-        className={
-          "border-primary/50 text-foreground h-12 w-full justify-center gap-2 text-base " +
-          (className ?? "")
-        }
+        className={cn(
+          "relative h-14 w-full justify-start gap-3 overflow-hidden rounded-xl px-4 text-base font-bold",
+          "bg-primary text-primary-foreground hover:bg-primary/90",
+          "shadow-[0_10px_30px_-8px_var(--primary)] ring-2 ring-primary/40 ring-offset-2 ring-offset-background",
+          className,
+        )}
         onClick={install}
       >
-        {deferred ? (
-          <Download className="size-5" aria-hidden />
-        ) : (
-          <Smartphone className="size-5" aria-hidden />
-        )}
-        Instalar aplicativo
+        {/* Reflexo que atravessa o botão. Fica fora do fluxo e não recebe clique. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-linear-to-r from-transparent via-white/45 to-transparent motion-safe:animate-shine"
+        />
+        <span className="bg-primary-foreground/15 flex size-9 shrink-0 items-center justify-center rounded-full">
+          <Icon className="size-5" aria-hidden />
+        </span>
+        <span className="flex min-w-0 flex-col items-start leading-tight">
+          <span>Instalar aplicativo</span>
+          <span className="text-xs font-medium opacity-80">
+            Tela cheia e notificação da galera
+          </span>
+        </span>
       </Button>
 
       <Dialog open={showHelp} onOpenChange={setShowHelp}>
