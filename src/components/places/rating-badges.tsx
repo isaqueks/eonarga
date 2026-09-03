@@ -1,11 +1,17 @@
 import { cn } from "@/lib/utils";
 
-/** Selo "Aprovado pelo narga": média ≥ 4,5 com pelo menos 3 notas (docs/03). */
+/**
+ * Selo "Aprovado pelo narga": média ≥ 4,5 com pelo menos 3 notas (docs/03).
+ * `short` mostra só "Aprovado" (o card do ranking não tem largura pro selo inteiro
+ * ao lado da nota no celular); o texto completo fica no title e na ficha.
+ */
 export function ApprovedBadge({
   size = "sm",
+  short = false,
   className,
 }: {
   size?: "sm" | "md";
+  short?: boolean;
   className?: string;
 }) {
   return (
@@ -15,9 +21,11 @@ export function ApprovedBadge({
         size === "md" ? "px-2.5 py-1 text-sm" : "px-2 py-0.5 text-xs",
         className,
       )}
+      title={short ? "Aprovado pelo narga" : undefined}
+      aria-label={short ? "Aprovado pelo narga" : undefined}
     >
       <span aria-hidden>🏅</span>
-      Aprovado pelo narga
+      {short ? "Aprovado" : "Aprovado pelo narga"}
     </span>
   );
 }

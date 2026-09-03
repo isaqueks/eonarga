@@ -73,7 +73,7 @@ export function PlaceCard({
           ) : (
             <span>sem nota</span>
           )}
-          {place.approved ? <ApprovedBadge /> : fewRatings ? <FewRatingsBadge /> : null}
+          {place.approved ? <ApprovedBadge short /> : fewRatings ? <FewRatingsBadge /> : null}
           {place.hasNarga === "yes" ? <HasNargaBadge value="yes" /> : null}
         </div>
 
