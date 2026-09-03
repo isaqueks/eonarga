@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "E o narga?",
     description: "Ranking de rolês do Centro. Interno. Zoeira.",
     lang: "pt-BR",
-    start_url: "/?source=pwa",
+    start_url: "/feed?source=pwa",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

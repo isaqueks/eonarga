@@ -41,7 +41,7 @@ function readCategoryForm(formData: FormData) {
 
 function revalidateCategories() {
   revalidatePath(ADMIN_PATH);
-  revalidatePath("/");
+  revalidatePath("/ranking");
   revalidatePath("/mapa");
 }
 

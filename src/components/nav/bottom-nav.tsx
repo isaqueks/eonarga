@@ -7,14 +7,14 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
-  { href: "/", label: "Ranking", icon: Trophy },
+  { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/mapa", label: "Mapa", icon: Map },
   { href: "/role", label: "Rolê", icon: Dices },
   { href: "/perfil", label: "Perfil", icon: User },
 ] as const;
 
 function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function BottomNav() {

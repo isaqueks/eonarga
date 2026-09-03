@@ -143,7 +143,7 @@ async function nextFreeSlug(base: string): Promise<string> {
 }
 
 function revalidatePlaceLists() {
-  revalidatePath("/");
+  revalidatePath("/ranking");
   revalidatePath("/mapa");
   revalidatePath("/role");
 }
@@ -291,7 +291,7 @@ export async function archivePlace(id: string): Promise<FormState> {
 
   revalidatePath(`/lugares/${place.slug}`);
   revalidatePlaceLists();
-  redirect("/");
+  redirect("/ranking");
 }
 
 export async function unarchivePlace(id: string): Promise<FormState> {

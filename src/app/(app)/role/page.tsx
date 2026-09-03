@@ -140,7 +140,7 @@ export default async function RolePage({ searchParams }: PageProps<"/role">) {
             size="lg"
             className="h-11"
             nativeButton={false}
-            render={<Link href="/" />}
+            render={<Link href="/ranking" />}
           >
             Ver o ranking
           </Button>

@@ -136,6 +136,7 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Reações e comentários em posts (migration 0007): `post_reactions` / `post_comments`, `togglePostReaction` / `addPostComment` / `deletePostComment` em `actions/posts.ts`, `ReactionBar` e `CommentThread` genéricos (avaliação ou post), reação em post como linha do feed, testes do `listFeed` e e2e
 - [x] Push "fulano comentou no seu post" pra quem postou (`notifyPostAuthor` em `actions/posts.ts`, kind `comment` no histórico do admin, âncora `#post-<id>` no card), com teste da action
 - [x] Card do ranking mais compacto: preço na linha do nome, selo na linha da nota, menos espaçamento
+- [x] Feed vira a página inicial: ranking em `/ranking`, `/` redireciona, pós-login e `start_url` do PWA apontam pro feed
 
 ## Definição de pronto (qualquer tarefa)
 

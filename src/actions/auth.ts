@@ -97,7 +97,7 @@ export async function login(_prevState: FormState, formData: FormData): Promise<
   const { token, expiresAt } = await createSession(user.id, userAgent);
   await setSessionCookie(token, expiresAt);
 
-  redirect(user.mustChangePassword ? "/trocar-senha" : (next ?? "/"));
+  redirect(user.mustChangePassword ? "/trocar-senha" : (next ?? "/feed"));
 }
 
 export async function logout(): Promise<void> {
@@ -165,7 +165,7 @@ export async function changePassword(
   // Trocou a senha: derruba os outros aparelhos, mantém este.
   await invalidateUserSessions(user.id, session.id);
 
-  redirect("/");
+  redirect("/feed");
 }
 
 export async function updateProfile(_prevState: FormState, formData: FormData): Promise<FormState> {

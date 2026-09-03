@@ -319,7 +319,7 @@ describe("archivePlace / unarchivePlace", () => {
     });
 
     state.user = OWNER;
-    expect(await expectRedirect(() => actions.archivePlace(place.id))).toBe("/");
+    expect(await expectRedirect(() => actions.archivePlace(place.id))).toBe("/ranking");
     expect((await placeBySlug("sebo-do-joao")).status).toBe("archived");
 
     state.user = ADMIN;

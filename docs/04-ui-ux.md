@@ -13,7 +13,8 @@
 ```
 Login ── Trocar senha (forçado na 1ª entrada)
 └── App (exige sessão)
-    ├── Ranking (home) ──┐
+    ├── Feed (home: novidades e posts)
+    ├── Ranking ─────────┐
     ├── Mapa             ├── Ficha do lugar ── Avaliar / Editar avaliação
     ├── [+] Novo lugar ──┘                  └── Editar lugar
     ├── Rolê (quero ir / já fui / sortear na v2)
@@ -21,7 +22,7 @@ Login ── Trocar senha (forçado na 1ª entrada)
                 └── Admin (só admin) ── Usuários / Categorias
 ```
 
-Barra inferior: **Ranking · Mapa · [+] · Rolê · Perfil**.
+Barra inferior: **Ranking · Mapa · [+] · Rolê · Perfil**. O feed é a página inicial (`/`, o logo e o pós-login levam pra ele); o ranking mora em `/ranking`.
 
 ## Telas
 
@@ -53,7 +54,7 @@ Barra inferior: **Ranking · Mapa · [+] · Rolê · Perfil**.
 
 Erro genérico "Email ou senha errados" (não revela qual). Sem "esqueci a senha". Clicar em "Não sou um robô" abre o desafio de imagens temático; nenhuma resposta é conferida. Spec completa no [09](./09-captcha-de-zoeira.md).
 
-### Ranking (home)
+### Ranking (`/ranking`)
 
 ```
 ┌──────────────────────────┐

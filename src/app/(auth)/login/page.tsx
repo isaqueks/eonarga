@@ -17,7 +17,7 @@ function safeNext(value: string | string[] | undefined): string | undefined {
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const current = await getCurrentUser();
-  if (current) redirect("/");
+  if (current) redirect("/feed");
 
   const { next } = await searchParams;
 

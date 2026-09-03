@@ -81,19 +81,20 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
 
   await login(page);
 
-  // Ranking vazio
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByText("Nenhum lugar ainda. E o narga?")).toBeVisible();
-  await shot(page, "05-ranking-vazio");
-
-  // Celular sem o app instalado: "Instalar aplicativo" fica fixo; sem prompt nativo
-  // (headless não manda beforeinstallprompt) abre as instruções.
+  // A casa é o feed. Celular sem o app instalado: "Instalar aplicativo" fica fixo;
+  // sem prompt nativo (headless não manda beforeinstallprompt) abre as instruções.
+  await expect(page).toHaveURL(/\/feed$/);
   const instalar = page.getByRole("button", { name: "Instalar aplicativo" });
   await expect(instalar).toBeVisible();
   await instalar.click();
   await expect(page.getByRole("dialog")).toContainText("Instalar o E o narga?");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
+
+  // Ranking vazio
+  await page.goto("/ranking");
+  await expect(page.getByText("Nenhum lugar ainda. E o narga?")).toBeVisible();
+  await shot(page, "05-ranking-vazio");
 
   // Novo lugar: marcar no mapa
   // Botões que viram <Link> ganham role="button" no Base UI; seleciona pelo texto.
@@ -209,11 +210,11 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await shot(page, "10-role");
 
   // Ranking: primeiro lugar, com o veredito mais recente como citação
-  await page.goto("/");
+  await page.goto("/ranking");
   await expect(page.getByRole("link", { name: /Sebo do João/ })).toBeVisible();
   await expect(page.getByText("Voltei e tava meia boca")).toBeVisible();
   await expect(page.getByText("poucas notas").first()).toBeVisible();
-  await page.goto("/?cat=restaurante");
+  await page.goto("/ranking?cat=restaurante");
   await expect(page.getByRole("link", { name: /Sebo do João/ })).toHaveCount(0);
   await shot(page, "11-ranking-filtro");
 

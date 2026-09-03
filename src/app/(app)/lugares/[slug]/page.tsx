@@ -66,7 +66,7 @@ export default async function PlacePage({ params }: PageProps<"/lugares/[slug]">
           size="icon-lg"
           className="size-11"
           nativeButton={false}
-          render={<Link href="/" />}
+          render={<Link href="/ranking" />}
         >
           <ArrowLeft className="size-5" aria-hidden />
           <span className="sr-only">Voltar</span>

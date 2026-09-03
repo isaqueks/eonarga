@@ -27,7 +27,7 @@ const BAD_EMOJI = "Esse emoji não existe por aqui.";
 /** Ficha do lugar + as listas onde a nota aparece. */
 function revalidateReviewSurfaces(slug: string) {
   revalidatePath(`/lugares/${slug}`);
-  revalidatePath("/");
+  revalidatePath("/ranking");
   revalidatePath("/perfil");
   revalidatePath("/role");
   revalidatePath("/mapa");
@@ -146,7 +146,7 @@ export async function deleteReview(reviewId: string): Promise<FormState> {
   await db.delete(reviews).where(eq(reviews.id, review.id));
 
   revalidatePath(`/lugares/${review.slug}`);
-  revalidatePath("/");
+  revalidatePath("/ranking");
   revalidatePath("/perfil");
   return { ok: true };
 }

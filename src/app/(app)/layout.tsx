@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col">
       <header className="border-border bg-background/95 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/feed" className="flex items-center gap-2">
           <Image
             src="/icons/logo-face.png"
             alt=""

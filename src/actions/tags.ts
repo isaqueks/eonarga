@@ -50,7 +50,7 @@ export async function setPlaceTags(
   }
 
   revalidatePath(`/lugares/${place.slug}`);
-  revalidatePath("/");
+  revalidatePath("/ranking");
   revalidatePath("/mapa");
   revalidatePath("/role");
 

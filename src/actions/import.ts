@@ -245,7 +245,7 @@ export async function importPlaces(_prev: ImportState, formData: FormData): Prom
   }
 
   if (created.length > 0) {
-    revalidatePath("/");
+    revalidatePath("/ranking");
     revalidatePath("/mapa");
   }
 

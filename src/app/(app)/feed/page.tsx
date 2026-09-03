@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PostCard } from "@/components/posts/post-card";
 import { ReviewFeedCard } from "@/components/posts/review-feed-card";
 import { InstallAppButton } from "@/components/pwa/install-app-button";
+import { PushNudge } from "@/components/pwa/push-nudge";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import { requireUser } from "@/lib/auth/guards";
@@ -46,6 +47,7 @@ export default async function FeedPage({ searchParams }: PageProps<"/feed">) {
       </header>
 
       <InstallAppButton />
+      <PushNudge />
 
       <Button
         size="lg"
@@ -68,7 +70,7 @@ export default async function FeedPage({ searchParams }: PageProps<"/feed">) {
               size="lg"
               className="h-11"
               nativeButton={false}
-              render={<Link href="/" />}
+              render={<Link href="/ranking" />}
             >
               Ver o ranking
             </Button>

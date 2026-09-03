@@ -26,7 +26,7 @@ export default async function NovoLugarPage() {
           size="lg"
           className="h-11"
           nativeButton={false}
-          render={<Link href="/" />}
+          render={<Link href="/ranking" />}
         >
           Voltar
         </Button>
