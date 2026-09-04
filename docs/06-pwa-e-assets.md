@@ -12,6 +12,7 @@ Abrir do ícone na tela inicial, em tela cheia, com splash do cachorro, e não q
   "short_name": "E o narga?",
   "description": "Ranking de rolês do Centro. Interno. Zoeira.",
   "lang": "pt-BR",
+  "id": "/?source=pwa",
   "start_url": "/feed?source=pwa",
   "share_target": {
     "action": "/feed/novo",

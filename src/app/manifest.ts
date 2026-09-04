@@ -6,6 +6,10 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "E o narga?",
     description: "Ranking de rolês do Centro. Interno. Zoeira.",
     lang: "pt-BR",
+    // Identidade do app instalado. Sem `id` o Chrome usa a `start_url`, e ela mudou na
+    // 0.9.0 (`/` → `/feed`): fixar no valor original mantém quem já instalou recebendo
+    // as atualizações do manifest (share_target, ícones…). Nunca mude isto (docs/08 #38).
+    id: "/?source=pwa",
     start_url: "/feed?source=pwa",
     scope: "/",
     display: "standalone",
