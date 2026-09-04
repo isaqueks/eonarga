@@ -408,6 +408,10 @@ async function abrirOnde(page: Page) {
   const escolher = page.getByRole("button", { name: "Escolher lugar" });
   const trocar = page.getByRole("button", { name: "Trocar" });
 
+  // O GPS (fixo no contexto) responde meio segundo depois e fecha o seletor sozinho:
+  // espera ele assentar, senão o clique cai num botão que está prestes a sumir.
+  await trocar.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+
   for (let attempt = 0; attempt < 10; attempt++) {
     if (await escolher.isVisible().catch(() => false)) return;
     if (await trocar.isVisible().catch(() => false)) {
@@ -437,8 +441,33 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   );
   await shot(page, "19-feed-avaliacao");
 
+  // --- Web Share Target: o que outro app compartilha cai no formulário -------
+  const manifest = await (await page.request.get("/manifest.webmanifest")).json();
+  expect(manifest.share_target).toMatchObject({ action: "/feed/novo", method: "GET" });
+  await page.goto("/feed/novo?text=Olha%20isso%20a%C3%AD");
+  await expect(page.getByLabel("Texto do post")).toHaveValue("Olha isso aí");
+  // Link do Instagram já abre a caixa de importar com o link preenchido (a busca em si
+  // depende do Instagram e não roda aqui).
+  await page.goto("/feed/novo?text=https%3A%2F%2Fwww.instagram.com%2Freel%2FDX7PnqbFL50%2F");
+  await expect(page.getByLabel("Cola o link do post")).toHaveValue(
+    "https://www.instagram.com/reel/DX7PnqbFL50/",
+  );
+  await expect(page.getByText("Só entra post com foto. Reel e vídeo não.")).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.goto("/feed", { waitUntil: "networkidle" });
+
   // --- Post 1: lugar da lista + texto ---------------------------------------
-  await page.getByText("📸 Postar").click();
+  // O clique pode cair no meio da hidratação e ser engolido: repete até navegar.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await page.getByText("📸 Postar").click();
+    try {
+      await page.waitForURL(/\/feed\/novo$/, { timeout: 3_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
   await expect(page).toHaveURL(/\/feed\/novo$/);
 
   await abrirOnde(page);

@@ -137,6 +137,8 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Push "fulano comentou no seu post" pra quem postou (`notifyPostAuthor` em `actions/posts.ts`, kind `comment` no histórico do admin, âncora `#post-<id>` no card), com teste da action
 - [x] Card do ranking mais compacto: preço na linha do nome, selo na linha da nota, menos espaçamento
 - [x] Feed vira a página inicial: ranking em `/ranking`, `/` redireciona, pós-login e `start_url` do PWA apontam pro feed
+- [x] Importar post do Instagram (migration 0008): `lib/instagram.ts` puro com teste, `importInstagramPost` com fetch limitado e allowlist da CDN, foto "no palco" (`lib/staged-imports.ts`), `createPost` aceita `importedPhotoId`, origem no card, `share_target` no manifest e `?text=` no `/feed/novo`
+- [ ] Testar o "Compartilhar" do Instagram num Android de verdade com o PWA instalado
 
 ## Definição de pronto (qualquer tarefa)
 

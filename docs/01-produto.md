@@ -104,6 +104,7 @@ Regras do post:
 - Post **fica pra sempre** na timeline. Quem apaga é quem postou (ou admin), e a imagem some junto.
 - Limite de 20 posts por hora por pessoa ("Calma, influencer."). Não é moderação: é pra ninguém entupir o feed sem querer.
 - Dá pra **reagir** (os mesmos emojis das avaliações) e **comentar** (thread curta, texto puro, até 500 caracteres) em qualquer post. Comentário some pela mão de quem escreveu, de quem postou ou do admin. Reação em post também vira linha nas novidades ("Fulano reagiu 😂 no post de Ciclano em X"); comentário não, fica só no card.
+- **Importar do Instagram**: cola o link de um post e o app traz a **primeira foto** (de carrossel, o primeiro slide que não é vídeo) e a **legenda** pra revisar antes de publicar; reel, vídeo e post privado são recusados, e sobra o caminho manual. O post guarda a origem ("📸 @perfil no Instagram", com link). Pelo **Compartilhar** do Instagram (Android com o app instalado) o link chega direto no formulário e a importação começa sozinha.
 - Comentário no post de outra pessoa manda um **push** só pra quem postou ("Fulano comentou no seu post: “…”"), que abre o feed já no post. Comentar no próprio post não apita, e quem não ligou as notificações simplesmente não recebe.
 
 ## Não-objetivos (de propósito)

@@ -15,6 +15,7 @@ import { commentNotificationBody, postInputSchema } from "@/lib/posts";
 import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isReactionEmoji } from "@/lib/reviews";
+import { discardStagedImport, takeStagedImport } from "@/lib/staged-imports";
 import { deleteImage, MAX_UPLOAD_BYTES, saveImage, sniffImageMime } from "@/lib/storage";
 
 /** Foto de post é pra ver no celular, igual à foto de lugar. */
@@ -33,6 +34,7 @@ const NOT_AN_IMAGE = "Isso não é uma imagem que eu reconheça.";
 // O sharp que vem pronto só decodifica HEIF em AV1; HEIC de iPhone (HEVC) fica de fora.
 const HEIC_NOT_SUPPORTED = "Não consegui abrir essa foto. Tenta mandar em JPEG ou PNG.";
 const TOO_MANY = "Calma, influencer.";
+const IMPORT_EXPIRED = "A foto importada venceu. Importa de novo.";
 const SAVE_FAILED = "Não deu pra salvar. Tenta de novo.";
 const POST_NOT_FOUND = "Não achei esse post.";
 const NOT_YOURS = "Só quem postou (ou admin) pode apagar.";
@@ -81,10 +83,12 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
 
   const photo = formData.get("photo");
   const hasPhoto = photo instanceof File && photo.size > 0;
+  // Foto importada do Instagram: já está no storage, "no palco" (docs/08 #37).
+  const importedPhotoId = field(formData, "importedPhotoId").trim();
   if (hasPhoto && photo.size > MAX_UPLOAD_BYTES) {
     return { ok: false, fieldErrors: { photo: TOO_BIG } };
   }
-  if (!hasPhoto && !input.body) {
+  if (!hasPhoto && !importedPhotoId && !input.body) {
     return { ok: false, fieldErrors: { body: EMPTY_POST } };
   }
 
@@ -93,7 +97,16 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
   }
 
   let saved: { id: string; width: number; height: number } | null = null;
+  let source: { url: string; author: string | null } | null = null;
+  if (!hasPhoto && importedPhotoId) {
+    const staged = takeStagedImport(importedPhotoId, user.id);
+    if (!staged) return { ok: false, fieldErrors: { photo: IMPORT_EXPIRED } };
+    saved = { id: staged.id, width: staged.width, height: staged.height };
+    source = { url: staged.sourceUrl, author: staged.sourceAuthor };
+  }
   if (hasPhoto) {
+    // Mandou foto própria por cima da importada: a importada vira lixo.
+    if (importedPhotoId) await discardStagedImport(importedPhotoId, user.id);
     const buffer = Buffer.from(await photo.arrayBuffer());
 
     // O `Content-Type` do upload é chute do cliente: quem manda é o magic byte (docs/05).
@@ -120,6 +133,8 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
       lat: input.lat,
       lng: input.lng,
       address: input.address,
+      sourceUrl: source?.url ?? null,
+      sourceAuthor: source?.author ?? null,
     });
   } catch {
     // Sem linha no banco a foto é lixo: apaga os arquivos em vez de deixar órfão.

@@ -585,3 +585,75 @@ describe("deletePostComment", () => {
     expect(await actions.deletePostComment("")).toEqual(erro);
   });
 });
+
+describe("createPost com foto importada do Instagram", () => {
+  /** Põe uma imagem real no storage e no palco, como `importInstagramPost` faria. */
+  async function stageImported(as = ANA): Promise<string> {
+    const { saveImage } = await import("@/lib/storage");
+    const { stageImport } = await import("@/lib/staged-imports");
+    const saved = await saveImage(await png(), { maxSize: 1600, thumbSize: 400 });
+    stageImport({
+      id: saved.id,
+      userId: as.id,
+      width: saved.width,
+      height: saved.height,
+      sourceUrl: "https://www.instagram.com/p/C8Zxn3JJhcG/",
+      sourceAuthor: "nasa",
+    });
+    return saved.id;
+  }
+
+  it("publica com a foto do palco e guarda a origem", async () => {
+    const photoId = await stageImported();
+
+    expect(
+      await expectRedirect({ ...AQUI, body: "Roubado do Instagram", importedPhotoId: photoId }),
+    ).toBe("/feed");
+
+    expect(await onlyPost()).toMatchObject({
+      userId: ANA.id,
+      body: "Roubado do Instagram",
+      photoId,
+      photoWidth: 120,
+      photoHeight: 80,
+      sourceUrl: "https://www.instagram.com/p/C8Zxn3JJhcG/",
+      sourceAuthor: "nasa",
+    });
+    expect(fileExists(photoId, ".webp")).toBe(true);
+
+    // Saiu do palco: a mesma foto não vira dois posts.
+    const { countStagedImports } = await import("@/lib/staged-imports");
+    expect(countStagedImports()).toBe(0);
+  });
+
+  it("foto importada sem texto basta", async () => {
+    const photoId = await stageImported();
+    await expectRedirect({ ...AQUI, importedPhotoId: photoId });
+    expect((await onlyPost()).photoId).toBe(photoId);
+  });
+
+  it("foto de outra pessoa ou id vencido não publica", async () => {
+    const photoId = await stageImported(BIA);
+
+    const result = await actions.createPost(
+      empty,
+      form({ ...AQUI, body: "x", importedPhotoId: photoId }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      fieldErrors: { photo: "A foto importada venceu. Importa de novo." },
+    });
+    expect(await db.select().from(schema.posts)).toHaveLength(0);
+  });
+
+  it("mandou foto própria junto: a própria vale e a importada é descartada", async () => {
+    const photoId = await stageImported();
+
+    await expectRedirect({ ...AQUI, importedPhotoId: photoId }, await photoFile());
+
+    const post = await onlyPost();
+    expect(post.photoId).not.toBe(photoId);
+    expect(post.sourceUrl).toBeNull();
+    expect(fileExists(photoId, ".webp")).toBe(false);
+  });
+});

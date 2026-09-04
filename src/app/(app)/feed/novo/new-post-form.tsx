@@ -1,14 +1,24 @@
 "use client";
 
 import { Loader2, LocateFixed, MapPin, Search, Store, X } from "lucide-react";
-import { useActionState, useCallback, useEffect, useRef, useState } from "react";
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 import { EMPTY_FORM_STATE } from "@/actions/form-state";
+import { discardInstagramImport, importInstagramPost } from "@/actions/instagram";
 import { createPost } from "@/actions/posts";
 import { LocationPickerLazy } from "@/components/map/location-picker-lazy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { extractInstagramLink } from "@/lib/instagram";
 import { formatLatLng, haversineMeters, nearestPlace, POST_BODY_MAX } from "@/lib/posts";
 import type { PostPlaceOption } from "@/lib/queries/posts";
 import { cn } from "@/lib/utils";
@@ -60,16 +70,32 @@ function formatDistance(meters: number): string {
 export function NewPostForm({
   places,
   center,
+  sharedText = null,
 }: {
   places: PostPlaceOption[];
   center: [number, number];
+  /** O que outro app mandou pelo "Compartilhar" (Web Share Target): link ou texto. */
+  sharedText?: string | null;
 }) {
   const [state, formAction, pending] = useActionState(createPost, EMPTY_FORM_STATE);
 
-  const [body, setBody] = useState("");
+  // O que veio pelo "Compartilhar" de outro app: link do Instagram importa sozinho
+  // (efeito mais abaixo); texto solto já nasce como texto do post.
+  const sharedLink = useMemo(
+    () => (sharedText ? extractInstagramLink(sharedText) : null),
+    [sharedText],
+  );
+  const [body, setBody] = useState(() => (sharedText && !sharedLink ? sharedText.trim() : ""));
   const [preview, setPreview] = useState<string | null>(null);
   const [hasPhoto, setHasPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Foto importada do Instagram: já está no storage, "no palco" até publicar (docs/08 #37).
+  const [imported, setImported] = useState<{ photoId: string } | null>(null);
+  const [igOpen, setIgOpen] = useState(() => sharedLink !== null);
+  const [igUrl, setIgUrl] = useState(() => sharedLink?.url ?? "");
+  const [igError, setIgError] = useState<string | null>(null);
+  const [igPending, startImport] = useTransition();
 
   const [mode, setMode] = useState<Mode>("gps");
   const [gps, setGps] = useState<"locating" | "ok" | "error">("locating");
@@ -141,23 +167,61 @@ export function NewPostForm({
     locate();
   }, [locate]);
 
-  // A URL do preview é do navegador e precisa ser devolvida quando troca ou sai da tela.
+  // A URL do preview de arquivo é do navegador e precisa ser devolvida quando troca
+  // ou sai da tela. A da foto importada é do nosso storage e não precisa.
   useEffect(() => {
-    if (!preview) return;
+    if (!preview || !preview.startsWith("blob:")) return;
     return () => URL.revokeObjectURL(preview);
   }, [preview]);
 
+  /** Desiste da foto importada: some do palco e do disco. */
+  function dropImported() {
+    if (!imported) return;
+    void discardInstagramImport(imported.photoId);
+    setImported(null);
+  }
+
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0] ?? null;
+    if (file) dropImported();
     setHasPhoto(Boolean(file));
     setPreview(file ? URL.createObjectURL(file) : null);
   }
 
   function clearPhoto() {
     if (photoInputRef.current) photoInputRef.current.value = "";
+    dropImported();
     setHasPhoto(false);
     setPreview(null);
   }
+
+  const importFromInstagram = useCallback((url: string) => {
+    setIgError(null);
+    startImport(async () => {
+      const result = await importInstagramPost(url);
+      if (!result.ok || !result.photoId || !result.url) {
+        setIgError(result.error ?? "Não rolou importar. Tenta de novo.");
+        return;
+      }
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      setImported({ photoId: result.photoId });
+      setPreview(result.url);
+      setHasPhoto(true);
+      const caption = result.caption;
+      if (caption) setBody((current) => (current.trim() === "" ? caption : current));
+      setIgOpen(false);
+      setIgUrl("");
+    });
+  }, []);
+
+  // Link compartilhado: dispara a importação uma vez. O ref segura a segunda chamada
+  // do StrictMode (e uma importação é um fetch no Instagram, não pode dobrar).
+  const sharedRef = useRef(false);
+  useEffect(() => {
+    if (sharedRef.current || !sharedLink) return;
+    sharedRef.current = true;
+    importFromInstagram(sharedLink.url);
+  }, [sharedLink, importFromInstagram]);
 
   /** "Tirar foto" abre a câmera no celular; "Da galeria" deixa o navegador oferecer os arquivos. */
   function openPhotoPicker(source: "camera" | "gallery") {
@@ -176,6 +240,7 @@ export function NewPostForm({
       <input type="hidden" name="lat" value={chosen ? String(chosen.lat) : ""} />
       <input type="hidden" name="lng" value={chosen ? String(chosen.lng) : ""} />
       <input type="hidden" name="address" value={chosen?.address ?? ""} />
+      <input type="hidden" name="importedPhotoId" value={imported?.photoId ?? ""} />
 
       {/* 1. Foto (opcional) */}
       <section className="flex flex-col gap-2">
@@ -227,6 +292,61 @@ export function NewPostForm({
             </Button>
           </div>
         )}
+        {!preview ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            className="h-12 w-full text-base"
+            aria-expanded={igOpen}
+            onClick={() => setIgOpen((open) => !open)}
+          >
+            📸 Importar do Instagram
+          </Button>
+        ) : null}
+        {igOpen && !preview ? (
+          <div className="border-border flex flex-col gap-2 rounded-xl border p-3">
+            <label htmlFor="ig-url" className="text-sm font-medium">
+              Cola o link do post
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id="ig-url"
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                value={igUrl}
+                onChange={(event) => setIgUrl(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  if (igUrl.trim() !== "" && !igPending) importFromInstagram(igUrl);
+                }}
+                placeholder="https://www.instagram.com/p/…"
+                disabled={igPending}
+                className="h-11 flex-1 text-base"
+              />
+              <Button
+                type="button"
+                size="lg"
+                className="h-11 px-4"
+                disabled={igPending || igUrl.trim() === ""}
+                onClick={() => importFromInstagram(igUrl)}
+              >
+                {igPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                {igPending ? "Buscando…" : "Buscar"}
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Vem a primeira foto e a legenda, pra você revisar. Reel e vídeo não entram.
+            </p>
+            {igError ? (
+              <p role="alert" className="text-destructive text-xs">
+                {igError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {state.fieldErrors?.photo ? (
           <p role="alert" className="text-destructive text-xs">
             {state.fieldErrors.photo}

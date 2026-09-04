@@ -13,6 +13,11 @@ Abrir do ícone na tela inicial, em tela cheia, com splash do cachorro, e não q
   "description": "Ranking de rolês do Centro. Interno. Zoeira.",
   "lang": "pt-BR",
   "start_url": "/feed?source=pwa",
+  "share_target": {
+    "action": "/feed/novo",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

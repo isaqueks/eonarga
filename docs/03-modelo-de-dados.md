@@ -147,6 +147,7 @@ Post do feed (docs/01 — Feed): foto e/ou texto, sempre com quem postou e de on
 | place_id                  | fk places (set null) | quando o post é de um lugar cadastrado               |
 | lat, lng                  | real                 | sempre gravadas, mesmo com `place_id`                |
 | address                   | text null            | do lugar, ou do reverse geocoding                    |
+| source_url, source_author | text null            | post importado do Instagram: link canônico e perfil  |
 | created_at, updated_at    | text                 |                                                      |
 
 Índices em `created_at` (a ordem do feed) e `user_id`. As regras "tem `body` **ou** `photo_id`" e "com `place_id`, `lat/lng` são os do lugar" ficam na action (`src/actions/posts.ts`), não no banco. A foto usa os mesmos arquivos do storage das outras (`{id}.webp` / `{id}.thumb.webp`) e é apagada junto com a linha.

@@ -57,6 +57,13 @@
       "when": 1788457980990,
       "tag": "0007_reacoes-e-comentarios-em-posts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788481558275,
+      "tag": "0008_importar-instagram",
+      "breakpoints": true
     }
   ]
 }

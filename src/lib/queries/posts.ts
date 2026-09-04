@@ -43,6 +43,8 @@ export interface PostItem {
   lat: number;
   lng: number;
   address: string | null;
+  /** Post importado do Instagram: link e perfil de origem. */
+  source: { url: string; author: string | null } | null;
   author: PersonRef;
   createdAt: string;
   /** Autor do post ou admin (docs/05). */
@@ -83,6 +85,8 @@ const columns = {
   lat: posts.lat,
   lng: posts.lng,
   address: posts.address,
+  sourceUrl: posts.sourceUrl,
+  sourceAuthor: posts.sourceAuthor,
   createdAt: posts.createdAt,
   placeId: places.id,
   placeSlug: places.slug,
@@ -102,6 +106,8 @@ type PostRow = {
   lat: number;
   lng: number;
   address: string | null;
+  sourceUrl: string | null;
+  sourceAuthor: string | null;
   createdAt: string;
   placeId: string | null;
   placeSlug: string | null;
@@ -229,6 +235,7 @@ function toItem(
     lat: row.lat,
     lng: row.lng,
     address: row.address,
+    source: row.sourceUrl ? { url: row.sourceUrl, author: row.sourceAuthor } : null,
     author: { id: row.authorId, name: row.authorName, avatarId: row.authorAvatarId },
     createdAt: row.createdAt,
     canDelete: viewer !== null && (viewer.role === "admin" || viewer.id === row.authorId),

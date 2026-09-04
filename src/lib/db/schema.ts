@@ -277,6 +277,9 @@ export const posts = sqliteTable(
     lat: real("lat").notNull(),
     lng: real("lng").notNull(),
     address: text("address"),
+    // Post importado do Instagram (docs/08 #37): o link canônico e o perfil de origem.
+    sourceUrl: text("source_url"),
+    sourceAuthor: text("source_author"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

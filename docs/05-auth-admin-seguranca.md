@@ -77,3 +77,10 @@ Checagem sempre no servidor, dentro da server action, via `requireUser()` / `req
 - Geolocalização só sob demanda (botão "onde estou"), nunca gravada.
 - Fotos perdem EXIF (inclusive GPS) no upload.
 - Sem analytics de terceiros. Se quiser saber uso, é `SELECT count(*)`.
+
+## Importar do Instagram (docs/08 #37)
+
+- O servidor faz dois fetches: a página de embed do post (`instagram.com`, URL montada a partir do código do post, nunca da URL colada) e a imagem, cuja URL vem do HTML do Instagram e **só passa se for https na CDN deles** (`*.cdninstagram.com`, `*.fbcdn.net`) — anti-SSRF. `redirect: "manual"`, 10 s de prazo, 3 MB de HTML e 10 MB de imagem no máximo.
+- A imagem é reprocessada pelo sharp como qualquer upload (webp, sem EXIF, magic bytes conferidos).
+- Foto importada fica "no palco" em memória por 30 min, só pra quem importou; o que vence tem os arquivos apagados. 10 importações por 10 min por pessoa.
+- User-agent honesto (`EONargaBot/1.0`): o Instagram entrega HTML renderizado pra quem não é navegador. Se mudarem isso, a importação quebra e o caminho manual continua.

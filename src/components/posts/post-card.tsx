@@ -58,6 +58,20 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
         className="-mt-1"
       />
 
+      {post.source ? (
+        <p className="text-muted-foreground -mt-1 text-xs leading-5">
+          <span aria-hidden>📸 </span>
+          <a
+            href={post.source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-foreground hover:underline"
+          >
+            {post.source.author ? `@${post.source.author} no Instagram` : "do Instagram"}
+          </a>
+        </p>
+      ) : null}
+
       {post.photo ? <PostPhoto photo={post.photo} authorName={post.author.name} /> : null}
 
       {post.body ? (

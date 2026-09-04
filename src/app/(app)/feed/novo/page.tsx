@@ -13,8 +13,13 @@ export const metadata: Metadata = { title: "Postar" };
 
 export const dynamic = "force-dynamic";
 
-export default async function NewPostPage() {
+export default async function NewPostPage({ searchParams }: PageProps<"/feed/novo">) {
   await requireUser();
+  // Web Share Target: o que o outro app mandou (Instagram manda o link no `text`).
+  const params = await searchParams;
+  const shared = [params.url, params.text, params.title]
+    .filter((value): value is string => typeof value === "string" && value.trim() !== "")
+    .join("\n");
 
   // A lista inteira de lugares ativos vai pro cliente: é ela que alimenta a busca,
   // a ordenação por distância e o "você tá no Sebo do João?" (menos de 500 linhas).
@@ -35,7 +40,7 @@ export default async function NewPostPage() {
         <h1 className="font-display text-xl">Postar</h1>
       </header>
 
-      <NewPostForm places={places} center={MAP_CENTER} />
+      <NewPostForm places={places} center={MAP_CENTER} sharedText={shared || null} />
     </div>
   );
 }

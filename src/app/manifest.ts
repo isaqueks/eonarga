@@ -22,6 +22,13 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "maskable",
       },
     ],
+    // "Compartilhar" do Instagram (e de qualquer app) cai no formulário de post com
+    // o link no `?text=`; só Android/Chrome com o PWA instalado (docs/08 #37).
+    share_target: {
+      action: "/feed/novo",
+      method: "GET",
+      params: { title: "title", text: "text", url: "url" },
+    },
     shortcuts: [
       {
         name: "Adicionar lugar",
