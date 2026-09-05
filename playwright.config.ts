@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
+import webpush from "web-push";
 
 const PORT = 3005;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -11,6 +12,10 @@ import { E2E_ADMIN } from "./e2e/fixtures";
 // A config também é carregada nos workers, com o servidor já de pé: aí o arquivo
 // está ocupado (EBUSY) e a limpeza é simplesmente ignorada.
 const E2E_DB = path.resolve("data/e2e.db");
+
+// Chaves VAPID só do e2e: ligam "Chamar galera" e "Cutucar" sem depender do .env da
+// máquina. O banco do e2e não tem assinatura, então nenhum push sai de verdade.
+const vapid = webpush.generateVAPIDKeys();
 for (const suffix of ["", "-wal", "-shm"]) {
   try {
     fs.rmSync(E2E_DB + suffix, { force: true });
@@ -64,6 +69,9 @@ export default defineConfig({
       ADMIN_NAME: "Admin",
       ADMIN_EMAIL: E2E_ADMIN.email,
       ADMIN_PASSWORD: E2E_ADMIN.password,
+      VAPID_PUBLIC_KEY: vapid.publicKey,
+      VAPID_PRIVATE_KEY: vapid.privateKey,
+      VAPID_SUBJECT: "mailto:e2e@eonarga.local",
     },
   },
 });

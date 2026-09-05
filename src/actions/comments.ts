@@ -10,6 +10,7 @@ import { assertUser } from "@/lib/auth/guards";
 import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
 import {
+  notifications,
   places,
   postCommentLikes,
   postComments,
@@ -18,7 +19,10 @@ import {
   reviews,
 } from "@/lib/db/schema";
 import { notifyMentions } from "@/lib/notify-mentions";
+import { likeNotificationBody } from "@/lib/posts";
+import { avatarIcon, isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 import type { CommentLikesTable } from "@/lib/queries/comment-likes";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // Módulo "use server": só pode exportar função async, então as mensagens ficam privadas.
 const BODY_ERROR = `Escreve alguma coisa (até ${COMMENT_MAX} caracteres).`;
@@ -27,6 +31,12 @@ const PLACE_ARCHIVED = "Esse lugar está arquivado.";
 const COMMENT_NOT_FOUND = "Resposta não encontrada.";
 const NOT_YOURS = "Essa resposta não é sua.";
 const LIKE_NOT_FOUND = "Esse comentário não existe mais.";
+
+/**
+ * Curtir, descurtir e curtir de novo o mesmo comentário apita uma vez por hora, senão
+ * o coração vira brinquedo de spam (docs/08 #44).
+ */
+const LIKE_NOTIFY_LIMIT = { limit: 1, windowMs: 60 * 60_000 };
 
 const commentSchema = z.object({
   reviewId: z.string().trim().min(1, REVIEW_NOT_FOUND),
@@ -120,7 +130,8 @@ export async function deleteComment(commentId: string): Promise<FormState> {
 
 /**
  * Liga/desliga a minha curtida num comentário (de post ou resposta de avaliação) e
- * devolve o estado novo. Qualquer membro curte qualquer comentário; não notifica ninguém.
+ * devolve o estado novo. Qualquer membro curte qualquer comentário; na ida, quem escreveu
+ * leva um push (`notifyCommentLiked`).
  */
 export async function toggleCommentLike(
   kind: "review" | "post",
@@ -133,33 +144,105 @@ export async function toggleCommentLike(
 
   if (kind === "post") {
     const rows = await db
-      .select({ id: postComments.id })
+      .select({
+        id: postComments.id,
+        userId: postComments.userId,
+        body: postComments.body,
+        postId: postComments.postId,
+      })
       .from(postComments)
       .where(eq(postComments.id, commentId))
       .limit(1);
-    if (!rows[0]) return { ok: false, error: LIKE_NOT_FOUND };
+    const comment = rows[0];
+    if (!comment) return { ok: false, error: LIKE_NOT_FOUND };
 
-    const result = await flipLike(postCommentLikes, rows[0].id, user.id);
+    const result = await flipLike(postCommentLikes, comment.id, user.id);
+    if (result.liked) {
+      await notifyCommentLiked({
+        kind,
+        comment,
+        liker: user,
+        url: `/feed#post-${comment.postId}`,
+        placeId: null,
+      });
+    }
     revalidatePath("/feed");
     return { ok: true, ...result };
   }
 
   if (kind === "review") {
     const rows = await db
-      .select({ id: reviewComments.id, slug: places.slug })
+      .select({
+        id: reviewComments.id,
+        userId: reviewComments.userId,
+        body: reviewComments.body,
+        slug: places.slug,
+        placeId: places.id,
+      })
       .from(reviewComments)
       .innerJoin(reviews, eq(reviews.id, reviewComments.reviewId))
       .innerJoin(places, eq(places.id, reviews.placeId))
       .where(eq(reviewComments.id, commentId))
       .limit(1);
-    if (!rows[0]) return { ok: false, error: LIKE_NOT_FOUND };
+    const comment = rows[0];
+    if (!comment) return { ok: false, error: LIKE_NOT_FOUND };
 
-    const result = await flipLike(reviewCommentLikes, rows[0].id, user.id);
-    revalidatePath(`/lugares/${rows[0].slug}`);
+    const result = await flipLike(reviewCommentLikes, comment.id, user.id);
+    if (result.liked) {
+      await notifyCommentLiked({
+        kind,
+        comment,
+        liker: user,
+        url: `/lugares/${comment.slug}#avaliacoes`,
+        placeId: comment.placeId,
+      });
+    }
+    revalidatePath(`/lugares/${comment.slug}`);
     return { ok: true, ...result };
   }
 
   return { ok: false, error: LIKE_NOT_FOUND };
+}
+
+/**
+ * "Fulano curtiu seu comentário": push só pra quem escreveu (docs/08 #44), abrindo no
+ * post ou na ficha. Curtir o próprio comentário não apita, e o mesmo par (pessoa,
+ * comentário) só apita uma vez por hora. Nunca lança: a curtida já está gravada.
+ */
+async function notifyCommentLiked(opts: {
+  kind: "review" | "post";
+  comment: { id: string; userId: string; body: string };
+  liker: { id: string; name: string; avatarId?: string | null };
+  url: string;
+  placeId: string | null;
+}): Promise<void> {
+  if (opts.comment.userId === opts.liker.id || !isPushEnabled()) return;
+  if (!checkRateLimit(`like:${opts.liker.id}:${opts.comment.id}`, LIKE_NOTIFY_LIMIT).ok) return;
+
+  try {
+    const payload: PushPayload = {
+      title: "E o narga?",
+      body: likeNotificationBody(opts.liker.name, opts.kind, opts.comment.body),
+      url: opts.url,
+      icon: avatarIcon(opts.liker.avatarId),
+      // Várias curtidas no mesmo comentário trocam o balão em vez de empilhar.
+      tag: `like:${opts.comment.id}`,
+    };
+    const report = await sendPushTo([opts.comment.userId], payload);
+    await db.insert(notifications).values({
+      id: nanoid(12),
+      kind: "like",
+      title: payload.title,
+      body: payload.body,
+      url: payload.url,
+      placeId: opts.placeId,
+      createdBy: opts.liker.id,
+      targetUserId: opts.comment.userId,
+      sentCount: report.sent,
+    });
+  } catch {
+    // Sem aviso desta vez; a curtida continua lá.
+  }
 }
 
 /** Tira a curtida se já existe, senão põe; e conta como ficou. */

@@ -111,7 +111,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       const icon = await notificationIcon(data.icon);
-      await self.registration.showNotification(data.title || "E o narga?", {
+      const options = {
         body: data.body || "Tem novidade no app.",
         icon,
         // O Android pinta só o alfa do badge: tem que ser silhueta, não foto.
@@ -120,10 +120,24 @@ self.addEventListener("push", (event) => {
         tag: data.tag || "eonarga",
         renotify: true,
         data: { url: data.url || "/" },
-      });
+      };
+      // A cutucada manda o próprio padrão de vibração; o resto usa o do celular.
+      const vibrate = vibrationPattern(data.vibrate);
+      if (vibrate) options.vibrate = vibrate;
+      await self.registration.showNotification(data.title || "E o narga?", options);
     })(),
   );
 });
+
+/**
+ * Padrão de vibração do payload (`[vibra, pausa, vibra…]` em ms), se vier bem formado:
+ * lista curta de inteiros até 5 s cada. Qualquer coisa fora disso é ignorada.
+ */
+function vibrationPattern(value) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 16) return null;
+  if (!value.every((n) => Number.isInteger(n) && n >= 0 && n <= 5000)) return null;
+  return value;
+}
 
 /**
  * Ícone grande da notificação: a foto de quem agiu (`icon` do payload, servida pela rota

@@ -190,4 +190,18 @@ describe("push", () => {
     );
     expect(sw.fetch).not.toHaveBeenCalled();
   });
+
+  it("repassa o padrão de vibração da cutucada e ignora padrão malformado", async () => {
+    const sw = boot();
+    await push(sw, { body: "Ana cutucou você", tag: "poke:ana", vibrate: [300, 100, 300] });
+    await push(sw, { body: "sem vibrar" });
+    await push(sw, { body: "lixo", vibrate: ["forte", -1] });
+    await push(sw, { body: "longo demais", vibrate: [100, 100000] });
+
+    const calls = sw.showNotification.mock.calls;
+    expect(calls[0][1]).toEqual(expect.objectContaining({ vibrate: [300, 100, 300] }));
+    expect(calls[1][1]).not.toHaveProperty("vibrate");
+    expect(calls[2][1]).not.toHaveProperty("vibrate");
+    expect(calls[3][1]).not.toHaveProperty("vibrate");
+  });
 });

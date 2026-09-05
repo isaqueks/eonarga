@@ -31,6 +31,11 @@ export interface PushPayload {
    * ícone do app se faltar (docs/08 #42). Sem foto, fica de fora do JSON.
    */
   icon?: string;
+  /**
+   * Padrão de vibração em ms, alternando vibra e pausa (`[300, 100, 300]`). Só a cutucada
+   * manda; o resto fica com o padrão do celular. iPhone e Firefox ignoram.
+   */
+  vibrate?: number[];
 }
 
 /** Ícone da notificação a partir da foto de perfil; sem foto, o SW usa o rosto do cachorro. */

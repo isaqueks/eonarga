@@ -5,9 +5,12 @@ import type { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/user-avatar";
 import { requireUser } from "@/lib/auth/guards";
+import { formatInteger } from "@/lib/format";
+import { isPushEnabled } from "@/lib/push";
 import { listGalera, type GaleraUser } from "@/lib/queries/users";
 
 import { Placar } from "./placar";
+import { PokeRow } from "./poke-button";
 
 export const metadata: Metadata = { title: "Galera" };
 
@@ -23,11 +26,15 @@ function counters(person: GaleraUser): string {
   ].join(" · ");
 }
 
-/** Gênero e testosterona, omitindo o que ninguém preencheu. */
+/**
+ * Gênero e testosterona, omitindo o que ninguém preencheu. Admin escreve o que quiser
+ * nos dois (docs/08 #25): o número vem com ponto de milhar e a unidade grudada nele, e
+ * a linha quebra em vez de cortar, senão "7000000000000 ng/dL" some atrás do "…".
+ */
 function bio(person: GaleraUser): string {
   const parts: string[] = [];
   if (person.gender) parts.push(person.gender);
-  if (person.testosterone !== null) parts.push(`${person.testosterone} ng/dL`);
+  if (person.testosterone !== null) parts.push(`${formatInteger(person.testosterone)}\u00a0ng/dL`);
   return parts.length > 0 ? parts.join(" · ") : "sem dados. suspeito.";
 }
 
@@ -41,9 +48,10 @@ function lastSeen(iso: string | null): string {
 export default async function GaleraPage() {
   const { user: me } = await requireUser();
   const people = await listGalera();
+  const pushEnabled = isPushEnabled();
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4 px-3 py-4">
       <header className="flex flex-col gap-1">
         <h1 className="font-display text-xl">Galera</h1>
         <p className="text-muted-foreground text-sm">
@@ -74,11 +82,17 @@ export default async function GaleraPage() {
                 ) : null}
               </div>
 
-              <p className="text-muted-foreground truncate">{bio(person)}</p>
+              <p className="text-muted-foreground wrap-anywhere">{bio(person)}</p>
               <p className="text-foreground/80 tabular-nums">{counters(person)}</p>
-              <p className="text-muted-foreground text-xs">
-                {lastSeen(person.lastSeenAt ?? person.lastLoginAt)}
-              </p>
+              <PokeRow
+                userId={person.id}
+                name={person.name}
+                enabled={pushEnabled && person.id !== me.id}
+              >
+                <p className="text-muted-foreground text-xs">
+                  {lastSeen(person.lastSeenAt ?? person.lastLoginAt)}
+                </p>
+              </PokeRow>
             </div>
           </li>
         ))}

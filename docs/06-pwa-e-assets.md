@@ -117,6 +117,11 @@ agiu, quando o payload traz `icon` (comentário, menção, "chamar galera"); o f
 é sempre `badge-96.png`: o Android pinta só o alfa do badge na barra de status, então precisa
 ser silhueta, e a foto do cachorro virava um quadrado (ou o sino padrão).
 
+O payload pode trazer `vibrate` (lista de ms alternando vibra e pausa); só a cutucada manda,
+com `[300, 100, 300, 100, 500]`. O worker repassa se for uma lista curta de inteiros até 5 s
+cada e ignora qualquer outra coisa; o resto das notificações fica com a vibração padrão do
+celular. iPhone e Firefox ignoram o campo.
+
 A foto vem da rota autenticada `/api/uploads`, e o download do ícone feito pelo navegador não
 leva o cookie de sessão em todo lugar. Por isso o próprio worker busca a foto (cache
 `eonarga-uploads` primeiro, depois rede, 3 s de paciência) e entrega como `data:` URL em

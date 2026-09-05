@@ -427,4 +427,74 @@ describe("toggleCommentLike (resposta)", () => {
     state.user = null;
     await expect(actions.toggleCommentLike("review", "x")).rejects.toThrow();
   });
+
+  it("curtir a resposta de outro apita quem escreveu, só na ida e uma vez por hora", async () => {
+    const { clearAllRateLimits } = await import("@/lib/rate-limit");
+    clearAllRateLimits();
+    Object.assign(process.env, {
+      VAPID_PUBLIC_KEY: "chave-publica",
+      VAPID_PRIVATE_KEY: "chave-privada",
+      VAPID_SUBJECT: "https://eonarga.com.br",
+    });
+    webpush.sendNotification.mockReset();
+    webpush.sendNotification.mockResolvedValue({ statusCode: 201 });
+    await db.delete(schema.notifications);
+    await db.insert(schema.pushSubscriptions).values([
+      {
+        id: "sub-bia",
+        userId: BIA.id,
+        endpoint: "https://push.example.com/bia",
+        p256dh: "p",
+        auth: "a",
+      },
+      {
+        id: "sub-ana",
+        userId: ANA.id,
+        endpoint: "https://push.example.com/ana",
+        p256dh: "p",
+        auth: "a",
+      },
+    ]);
+
+    const id = await seed(BIA, "curte aí");
+
+    // Curtir a própria resposta não apita ninguém.
+    state.user = BIA;
+    expect(await actions.toggleCommentLike("review", id)).toMatchObject({ ok: true, liked: true });
+    expect(webpush.sendNotification).not.toHaveBeenCalled();
+
+    state.user = { ...ANA, avatarId: "abcdefghijklmnop" };
+    expect(await actions.toggleCommentLike("review", id)).toMatchObject({
+      ok: true,
+      liked: true,
+      count: 2,
+    });
+    expect(webpush.sendNotification).toHaveBeenCalledTimes(1);
+    const [target, raw] = webpush.sendNotification.mock.calls[0];
+    expect((target as { endpoint: string }).endpoint).toBe("https://push.example.com/bia");
+    expect(JSON.parse(raw as string)).toEqual({
+      title: "E o narga?",
+      body: "Ana curtiu sua resposta: “curte aí”",
+      url: `/lugares/${PLACE_SLUG}#avaliacoes`,
+      icon: "/api/uploads/abcdefghijklmnop?v=thumb",
+      tag: `like:${id}`,
+    });
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      kind: "like",
+      createdBy: ANA.id,
+      targetUserId: BIA.id,
+      placeId: PLACE_ID,
+      sentCount: 1,
+    });
+
+    // Descurtir não apita; curtir de novo dentro da hora também não.
+    expect(await actions.toggleCommentLike("review", id)).toMatchObject({ ok: true, liked: false });
+    expect(await actions.toggleCommentLike("review", id)).toMatchObject({ ok: true, liked: true });
+    expect(webpush.sendNotification).toHaveBeenCalledTimes(1);
+    expect(await db.select().from(schema.notifications)).toHaveLength(1);
+
+    delete process.env.VAPID_PRIVATE_KEY;
+    await db.delete(schema.pushSubscriptions);
+    await db.delete(schema.notifications);
+  });
 });

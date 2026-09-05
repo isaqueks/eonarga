@@ -8,6 +8,13 @@ export function formatStars(mean: number): string {
   return (Math.round(mean * 10) / 10).toFixed(1).replace(".", ",");
 }
 
+/** 7000000000 → "7.000.000.000" (ponto de milhar, sem Intl) */
+export function formatInteger(value: number): string {
+  const digits = Math.trunc(Math.abs(value)).toString();
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return value < 0 ? `-${grouped}` : grouped;
+}
+
 /** 4 → "4 notas"; 1 → "1 nota" */
 export function formatReviewCount(count: number): string {
   return `${count} ${count === 1 ? "nota" : "notas"}`;

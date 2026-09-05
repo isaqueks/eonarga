@@ -260,6 +260,16 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(page.getByText("Ana Teste")).toBeVisible();
   await shot(page, "14b-galera");
 
+  // Cutucar: a Ana não tem assinatura de push, então o aviso é esse; a segunda cutucada
+  // dentro do minuto bate no rate limit.
+  await page.getByRole("button", { name: "Cutucar Ana Teste", exact: true }).click();
+  await expect(page.getByText("Ana Teste não ligou notificação.")).toBeVisible({
+    timeout: 60_000,
+  });
+  await page.getByRole("button", { name: "Cutucar Ana Teste", exact: true }).click();
+  await expect(page.getByText("Calma. Uma cutucada por minuto.")).toBeVisible();
+  await shot(page, "14c-galera-cutucar");
+
   // Foto de perfil: envia um PNG gerado na hora
   await page.goto("/perfil");
   const png = await sharp({
@@ -323,14 +333,25 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
     page.locator(`input[value="${E2E_ADMIN.email}"], :text("${E2E_ADMIN.email}")`).first(),
   ).toBeVisible();
   // Admin: gênero em texto livre e testosterona sem teto.
-  await page.locator("#gender").fill("Alfa de Floripa");
-  await page.locator("#testosterone").fill("5000");
+  await page.locator("#gender").fill("Helicóptero de Combate Pesado 🙅");
+  await page.locator("#testosterone").fill("7000000000000");
   await page.getByRole("button", { name: "Salvar", exact: true }).click();
   await expect(page.getByText("Salvo.")).toBeVisible({ timeout: 30_000 });
   await page.reload();
-  await expect(page.locator("#gender")).toHaveValue("Alfa de Floripa");
-  await expect(page.locator("#testosterone")).toHaveValue("5000");
+  await expect(page.locator("#gender")).toHaveValue("Helicóptero de Combate Pesado 🙅");
+  await expect(page.locator("#testosterone")).toHaveValue("7000000000000");
   await shot(page, "15-perfil");
+
+  // Galera: a bio longa quebra linha em vez de sumir atrás do "…", e nada vaza pro lado.
+  await page.goto("/galera");
+  const bio = page.getByText(/Helicóptero de Combate Pesado 🙅 · 7\.000\.000\.000\.000/);
+  await expect(bio).toBeVisible();
+  expect(await bio.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await shot(page, "15b-galera-bio-longa");
+  await page.goto("/perfil");
 
   // Tema: o toggle tira e devolve a classe `dark` do <html> (next-themes).
   const html = page.locator("html");

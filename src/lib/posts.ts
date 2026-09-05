@@ -87,12 +87,28 @@ export const COMMENT_PUSH_EXCERPT_MAX = 90;
  * passando do limite, é cortado com reticências.
  */
 export function commentNotificationBody(commenterName: string, comment: string): string {
+  return `${commenterName} comentou no seu post: “${pushExcerpt(comment)}”`;
+}
+
+/**
+ * Corpo do push "fulano curtiu seu comentário" (docs/08 #44). Na avaliação a casa
+ * chama de resposta, então a frase acompanha.
+ */
+export function likeNotificationBody(
+  likerName: string,
+  where: "post" | "review",
+  comment: string,
+): string {
+  const what = where === "post" ? "seu comentário" : "sua resposta";
+  return `${likerName} curtiu ${what}: “${pushExcerpt(comment)}”`;
+}
+
+/** O comentário numa linha só e, passando do limite, cortado com reticências. */
+function pushExcerpt(comment: string): string {
   const oneLine = comment.replace(/\s+/g, " ").trim();
-  const excerpt =
-    oneLine.length > COMMENT_PUSH_EXCERPT_MAX
-      ? `${oneLine.slice(0, COMMENT_PUSH_EXCERPT_MAX - 1).trimEnd()}…`
-      : oneLine;
-  return `${commenterName} comentou no seu post: “${excerpt}”`;
+  return oneLine.length > COMMENT_PUSH_EXCERPT_MAX
+    ? `${oneLine.slice(0, COMMENT_PUSH_EXCERPT_MAX - 1).trimEnd()}…`
+    : oneLine;
 }
 
 /** Quanto do texto da avaliação cabe na prévia do card do feed. */

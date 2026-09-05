@@ -6,6 +6,7 @@ import {
   FEED_PREVIEW_MAX,
   formatLatLng,
   haversineMeters,
+  likeNotificationBody,
   NEARBY_PLACE_METERS,
   nearestPlace,
   POST_BODY_MAX,
@@ -197,5 +198,24 @@ describe("commentNotificationBody", () => {
   it("não corta comentário que cabe", () => {
     const justo = "a".repeat(COMMENT_PUSH_EXCERPT_MAX);
     expect(commentNotificationBody("Bia", justo)).toContain(`“${justo}”`);
+  });
+});
+
+describe("likeNotificationBody", () => {
+  it("chama de comentário no post e de resposta na avaliação", () => {
+    expect(likeNotificationBody("Bia", "post", "Bora amanhã?")).toBe(
+      "Bia curtiu seu comentário: “Bora amanhã?”",
+    );
+    expect(likeNotificationBody("Bia", "review", "Discordo.")).toBe(
+      "Bia curtiu sua resposta: “Discordo.”",
+    );
+  });
+
+  it("corta comentário longo do mesmo jeito que o push de comentário", () => {
+    const longo = `${"palavra ".repeat(20)}fim`;
+    const body = likeNotificationBody("Bia", "post", longo);
+    const excerpt = body.slice("Bia curtiu seu comentário: “".length, -1);
+    expect(excerpt.endsWith("…")).toBe(true);
+    expect(excerpt.length).toBeLessThanOrEqual(COMMENT_PUSH_EXCERPT_MAX);
   });
 });

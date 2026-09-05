@@ -937,6 +937,34 @@ describe("curtir comentário de post", () => {
     expect(await db.select().from(schema.postCommentLikes)).toEqual([]);
   });
 
+  it("curtir comentário de outro apita quem escreveu, abrindo no post", async () => {
+    const commentActions = await import("@/actions/comments");
+    clearAllRateLimits();
+    await subscribe("bia-celular", BIA.id);
+    const id = await seedTextPost(); // post da Ana
+    state.user = BIA;
+    await actions.addPostComment(empty, form({ postId: id, body: "curte aí" }));
+    const comment = (await db.select().from(schema.postComments))[0];
+    webpush.sendNotification.mockClear();
+
+    state.user = { ...ADMIN, avatarId: "abcdefghijklmnop" };
+    expect(await commentActions.toggleCommentLike("post", comment.id)).toMatchObject({
+      ok: true,
+      liked: true,
+    });
+    expect(pushedTo()).toEqual(["https://push.example.com/bia-celular"]);
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1] as string)).toEqual({
+      title: "E o narga?",
+      body: `${ADMIN.name} curtiu seu comentário: “curte aí”`,
+      url: `/feed#post-${id}`,
+      icon: "/api/uploads/abcdefghijklmnop?v=thumb",
+      tag: `like:${comment.id}`,
+    });
+    const likes = (await db.select().from(schema.notifications)).filter((n) => n.kind === "like");
+    expect(likes).toHaveLength(1);
+    expect(likes[0]).toMatchObject({ createdBy: ADMIN.id, targetUserId: BIA.id, sentCount: 1 });
+  });
+
   it("comentário que não existe não curte", async () => {
     const commentActions = await import("@/actions/comments");
     expect(await commentActions.toggleCommentLike("post", "nada")).toEqual({
