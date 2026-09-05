@@ -625,6 +625,46 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   expect((await parcial.body()).byteLength).toBe(100);
   await shot(page, "22b-feed-com-video");
 
+  // --- Um vídeo por vez: dar play no segundo pausa o primeiro --------------------
+  await page.getByText("📸 Postar").click();
+  await expect(page).toHaveURL(/\/feed\/novo$/);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page
+      .locator('input[name="media"]')
+      .setInputFiles({ name: "rolê2.mp4", mimeType: "video/mp4", buffer: mp4 });
+    try {
+      await expect(previaVideo).toBeVisible({ timeout: 5_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  await page.getByLabel("Texto do post").fill("Segundo vídeo");
+  await abrirOnde(page);
+  await page.getByRole("button", { name: "Escolher lugar" }).click();
+  await page.getByRole("button", { name: /Sebo do João/ }).click();
+  await page.getByRole("button", { name: "Publicar" }).click();
+  await page.waitForURL(/\/feed$/);
+
+  const videos = page.getByLabel("Vídeo de Admin");
+  await expect(videos).toHaveCount(2, { timeout: 30_000 });
+  // `play()` sem gesto só é permitido com o som desligado; o que interessa é o `play`.
+  const estado = await videos.evaluateAll(async (elements) => {
+    const [primeiro, segundo] = elements as HTMLVideoElement[];
+    for (const v of [primeiro, segundo]) v.muted = true;
+    await primeiro.play();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const antes = primeiro.paused;
+    await segundo.play();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return {
+      primeiroTocavaAntes: !antes,
+      primeiroPausou: primeiro.paused,
+      segundoToca: !segundo.paused,
+    };
+  });
+  expect(estado).toEqual({ primeiroTocavaAntes: true, primeiroPausou: true, segundoToca: true });
+
   // --- Apagar o post da foto pelo menu "⋯" ----------------------------------
   const apagar = page.getByRole("menuitem", { name: /Apagar/ });
   for (let attempt = 0; attempt < 6; attempt++) {

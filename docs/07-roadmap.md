@@ -141,6 +141,7 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [ ] Testar o "Compartilhar" do Instagram num Android de verdade com o PWA instalado
 - [x] Vídeo em post (migration 0009): `lib/video-storage.ts` (sniff, dimensões do MP4, stream com teto), rota `/api/videos` com Range, formulário com câmera de vídeo e galeria foto/vídeo, card com player; reel/vídeo do Instagram importado com capa
 - [ ] Testar vídeo de iPhone (HEVC) e, se não tocar em Android, avaliar ffmpeg fora da VPS
+- [x] Um vídeo por vez no feed: dar play pausa os outros (`onPlay` no player), com e2e
 
 ## Definição de pronto (qualquer tarefa)
 
