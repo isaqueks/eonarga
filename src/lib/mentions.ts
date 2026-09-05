@@ -25,12 +25,7 @@ const MENTION_RE = /(^|[\s(])@([^@:\n]{1,60}?):/gu;
 
 /** Compara nome sem acento, sem caixa e sem espaço duplicado: "Joao" acha "João". */
 export function normalizeName(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 /** Os nomes mencionados, na ordem, sem repetir (comparação normalizada). */

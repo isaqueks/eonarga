@@ -22,9 +22,23 @@ const UPLOAD_CACHE = "eonarga-uploads";
 const KEEP = [SHELL_CACHE, PAGES_CACHE, TILE_CACHE, UPLOAD_CACHE];
 
 const OFFLINE_URL = "/~offline";
-const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png", "/logo.jpg", "/manifest.webmanifest"];
+/** Ícone grande padrão das notificações (rosto do cachorro) e o badge monocromático (narguilé). */
+const APP_ICON = "/icons/logo-face.png";
+const BADGE = "/icons/badge-96.png";
+const PRECACHE = [
+  OFFLINE_URL,
+  "/icons/icon-192.png",
+  APP_ICON,
+  BADGE,
+  "/logo.jpg",
+  "/manifest.webmanifest",
+];
 
 const NAV_TIMEOUT_MS = 3000;
+/** Quanto a notificação espera pela foto de perfil antes de sair com o ícone do app. */
+const ICON_TIMEOUT_MS = 3000;
+/** Foto maior que isso não vira data URL (as thumbs têm 400 px e ficam bem abaixo). */
+const ICON_MAX_BYTES = 512 * 1024;
 const TILE_HOST = "tile.openstreetmap.org";
 const TILE_MAX_ENTRIES = 300;
 const TILE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -95,17 +109,58 @@ self.addEventListener("push", (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title || "E o narga?", {
-      body: data.body || "Tem novidade no app.",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
-      // Mesma tag = um balão só por assunto; renotify faz o celular apitar mesmo assim.
-      tag: data.tag || "eonarga",
-      renotify: true,
-      data: { url: data.url || "/" },
-    }),
+    (async () => {
+      const icon = await notificationIcon(data.icon);
+      await self.registration.showNotification(data.title || "E o narga?", {
+        body: data.body || "Tem novidade no app.",
+        icon,
+        // O Android pinta só o alfa do badge: tem que ser silhueta, não foto.
+        badge: BADGE,
+        // Mesma tag = um balão só por assunto; renotify faz o celular apitar mesmo assim.
+        tag: data.tag || "eonarga",
+        renotify: true,
+        data: { url: data.url || "/" },
+      });
+    })(),
   );
 });
+
+/**
+ * Ícone grande da notificação: a foto de quem agiu (`icon` do payload, servida pela rota
+ * autenticada de uploads) ou o rosto do cachorro. O download do ícone feito pelo navegador
+ * não leva o cookie de sessão em todo lugar, então o próprio worker busca a foto (cache de
+ * uploads primeiro, depois rede) e a entrega como data URL. Qualquer tropeço, ou 3 s de
+ * espera, cai pro ícone do app: a notificação não pode atrasar por causa de uma foto.
+ */
+async function notificationIcon(iconPath) {
+  if (!iconPath || typeof iconPath !== "string") return APP_ICON;
+  try {
+    const url = new URL(iconPath, self.location.origin);
+    if (url.origin !== self.location.origin) return APP_ICON;
+    const request = new Request(url.href, { credentials: "same-origin" });
+    const response = await withTimeout(
+      cacheFirst(request, UPLOAD_CACHE, UPLOAD_MAX_ENTRIES),
+      ICON_TIMEOUT_MS,
+    );
+    if (!response || !response.ok) return APP_ICON;
+    return (await toDataUrl(response)) || APP_ICON;
+  } catch {
+    return APP_ICON;
+  }
+}
+
+/** Corpo da resposta como `data:` URL em base64. Null se vier vazio ou grande demais. */
+async function toDataUrl(response) {
+  const type = response.headers.get("content-type") || "image/webp";
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length === 0 || bytes.length > ICON_MAX_BYTES) return null;
+  let binary = "";
+  // Em blocos: `fromCharCode.apply` com a imagem inteira estoura o limite de argumentos.
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return `data:${type};base64,${btoa(binary)}`;
+}
 
 /** Tocar na notificação leva pro lugar certo, reaproveitando a janela já aberta. */
 self.addEventListener("notificationclick", (event) => {

@@ -58,6 +58,7 @@ O arquivo é 554×554, JPEG, sem transparência, com o texto "e o narga?" na fai
 | `icon-192.png`, `icon-512.png`              | 192 / 512      | Imagem inteira                                                                                                                                                                                                         |
 | `icon-maskable-512.png`                     | 512            | Imagem inteira reduzida a **80%** sobre fundo `#0e1110`, centralizada. A zona segura do maskable é o círculo central de 80%; assim o rosto não é cortado. O texto pode sumir na borda em launchers redondos: aceitável |
 | `logo-face.png`                             | 256            | Mesmo recorte do favicon, pro header                                                                                                                                                                                   |
+| `badge-96.png`                              | 96             | **Desenhado em SVG** no script, não recortado: silhueta branca de narguilé sobre transparente, pro `badge` das notificações (o Android pinta só o alfa; a foto virava um quadrado)                                     |
 | `logo.jpg`                                  | 554 (original) | Cópia do original pra login e estados vazios                                                                                                                                                                           |
 | `og.png`                                    | 1200×630       | Só se rolar link público (v2)                                                                                                                                                                                          |
 
@@ -96,7 +97,8 @@ Consequências de não ter bundler:
 | Resto de `/api/*`, payloads RSC, `/sw.js` | NetworkOnly (nem intercepta)                           | —                   |
 | Qualquer método diferente de GET          | NetworkOnly                                            | —                   |
 
-- Pré-cache no `install`: `/~offline`, `/icons/icon-192.png`, `/logo.jpg`, `/manifest.webmanifest`.
+- Pré-cache no `install`: `/~offline`, `/icons/icon-192.png`, `/icons/logo-face.png`,
+  `/icons/badge-96.png`, `/logo.jpg`, `/manifest.webmanifest`.
   Cada um por conta própria: um 404 não derruba a instalação inteira.
 - Só entra no cache resposta `ok` e de mesma origem (`type === "basic"`); os tiles são a única
   exceção de terceiro, e mesmo eles só quando vêm `ok` (o Leaflet pede com `crossOrigin`).
@@ -106,6 +108,21 @@ Consequências de não ter bundler:
 - No `activate`, apaga todo cache `eonarga-*` que não seja de agora. Os caches de tiles e de
   fotos **não** têm versão no nome de propósito: rebaixar 300 tiles a cada deploy seria falta de
   educação com o OSM e com o 4G da galera.
+
+### Notificações
+
+O handler de `push` monta a notificação com duas imagens. O `icon` (grande) é a foto de quem
+agiu, quando o payload traz `icon` (comentário, menção, "chamar galera"); o fallback é
+`logo-face.png`, o rosto do cachorro, e aviso do admin não manda `icon` de propósito. O `badge`
+é sempre `badge-96.png`: o Android pinta só o alfa do badge na barra de status, então precisa
+ser silhueta, e a foto do cachorro virava um quadrado (ou o sino padrão).
+
+A foto vem da rota autenticada `/api/uploads`, e o download do ícone feito pelo navegador não
+leva o cookie de sessão em todo lugar. Por isso o próprio worker busca a foto (cache
+`eonarga-uploads` primeiro, depois rede, 3 s de paciência) e entrega como `data:` URL em
+base64; qualquer tropeço cai pro rosto do cachorro, sem atrasar a notificação. iOS ignora
+`icon` e `badge` e mostra o ícone do app. Testado em `src/lib/sw.test.ts`, que carrega o
+`sw.js` num `vm` com os globais falsificados.
 
 ### Atualização
 

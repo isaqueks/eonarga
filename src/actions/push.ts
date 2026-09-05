@@ -16,7 +16,7 @@ import {
 import { assertAdmin, assertUser } from "@/lib/auth/guards";
 import { db } from "@/lib/db/client";
 import { notifications, places, pushSubscriptions, users } from "@/lib/db/schema";
-import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
+import { avatarIcon, isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit";
 
 const PUSH_OFF = "Push não está configurado no servidor.";
@@ -128,6 +128,7 @@ export async function callGroup(placeId: string): Promise<CallGroupState> {
     body: `${user.name} chamou a galera pro ${place.name}`,
     url: `/lugares/${place.slug}`,
     tag: `call:${place.id}`,
+    icon: avatarIcon(user.avatarId),
   };
 
   const report = await sendPushTo(null, payload, { excludeUserId: user.id });

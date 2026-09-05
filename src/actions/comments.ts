@@ -66,7 +66,7 @@ export async function addComment(_prev: FormState, formData: FormData): Promise<
   // Quem foi citado na resposta leva um push apontando pra ficha.
   await notifyMentions({
     text: data.body,
-    author: { id: user.id, name: user.name },
+    author: { id: user.id, name: user.name, avatarId: user.avatarId },
     where: "comment",
     url: `/lugares/${review.slug}#avaliacoes`,
     placeId: review.placeId,

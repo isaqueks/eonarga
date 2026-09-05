@@ -70,9 +70,9 @@ describe("isInstagramMediaUrl", () => {
   it("aceita só https na CDN do Instagram/Facebook", () => {
     expect(isInstagramMediaUrl("https://instagram.fnvt11-1.fna.fbcdn.net/v/t51/x.jpg")).toBe(true);
     expect(isInstagramMediaUrl(`${CDN}/v/x.jpg`)).toBe(true);
-    expect(isInstagramMediaUrl("https://instagram.fnvt11-1.fna.fbcdn.net/o1/v/t2/f2/m86/x.mp4")).toBe(
-      true,
-    );
+    expect(
+      isInstagramMediaUrl("https://instagram.fnvt11-1.fna.fbcdn.net/o1/v/t2/f2/m86/x.mp4"),
+    ).toBe(true);
     expect(isInstagramMediaUrl("http://scontent.cdninstagram.com/v/x.jpg")).toBe(false);
     expect(isInstagramMediaUrl("https://fbcdn.net.evil.com/x.jpg")).toBe(false);
     expect(isInstagramMediaUrl("https://127.0.0.1/x.jpg")).toBe(false);

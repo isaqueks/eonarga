@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { db } from "@/lib/db/client";
 import { notifications, users } from "@/lib/db/schema";
 import { mentionNotificationBody, resolveMentions } from "@/lib/mentions";
-import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
+import { avatarIcon, isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 
 /**
  * Menção vira push (docs/08 #41): quem foi citado com `@Nome:` num post, comentário ou
@@ -16,7 +16,7 @@ import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
  */
 export async function notifyMentions(opts: {
   text: string;
-  author: { id: string; name: string };
+  author: { id: string; name: string; avatarId?: string | null };
   /** `post` = texto de post; `comment` = comentário de post ou resposta de avaliação. */
   where: "post" | "comment";
   /** Caminho aberto ao tocar na notificação. */
@@ -41,6 +41,7 @@ export async function notifyMentions(opts: {
       title: "E o narga?",
       body: mentionNotificationBody(opts.author.name, opts.where, opts.text),
       url: opts.url,
+      icon: avatarIcon(opts.author.avatarId),
       // Uma menção por lugar/pessoa troca o balão em vez de empilhar.
       tag: `mention:${opts.url}`,
     };

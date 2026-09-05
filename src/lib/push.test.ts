@@ -232,3 +232,12 @@ describe("countPushAudience", () => {
     expect(await push.countPushAudience()).toEqual({ devices: 2, people: 1 });
   });
 });
+
+describe("avatarIcon", () => {
+  it("vira a URL da thumb da foto; sem foto, fica fora do JSON do payload", () => {
+    expect(push.avatarIcon("abcdefghijklmnop")).toBe("/api/uploads/abcdefghijklmnop?v=thumb");
+    expect(push.avatarIcon(null)).toBeUndefined();
+    expect(push.avatarIcon(undefined)).toBeUndefined();
+    expect(JSON.stringify({ title: "x", icon: push.avatarIcon(null) })).toBe('{"title":"x"}');
+  });
+});

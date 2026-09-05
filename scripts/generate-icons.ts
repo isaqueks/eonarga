@@ -20,6 +20,21 @@ const BG = "#0e1110";
 // Recorte do rosto: tira a faixa do texto e um pouco das bordas. Ajustar olhando.
 const FACE = { left: 47, top: 20, width: 460, height: 460 };
 
+/**
+ * Badge das notificações (docs/06). O Android pinta só o alfa do badge, então tem que ser
+ * silhueta branca sobre transparente: a foto do cachorro virava um quadrado. Um narguilé,
+ * óbvio. Grade de 96 pra bater com o tamanho servido (24 dp em xxxhdpi).
+ */
+const BADGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <g fill="#fff">
+    <rect x="36" y="6" width="24" height="15" rx="4"/>
+    <rect x="43" y="20" width="10" height="44"/>
+    <ellipse cx="48" cy="35" rx="21" ry="5.5"/>
+    <path d="M36 58C46 51 50 51 60 58C74 68 73 84 62 90H34C23 84 22 68 36 58Z"/>
+  </g>
+  <path d="M58 27C82 30 84 56 72 66C65 72 59 75 57 80" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+</svg>`;
+
 async function main() {
   const meta = await sharp(SRC).metadata();
   if (!meta.width || !meta.height) throw new Error("não consegui ler eonarga.jpg");
@@ -33,6 +48,12 @@ async function main() {
   // Logo inteiro (login, estados vazios) e recorte do rosto (header).
   await fs.copyFile(SRC, path.join(ROOT, "public", "logo.jpg"));
   await face().resize(256, 256).png().toFile(path.join(OUT, "logo-face.png"));
+
+  // Badge das notificações: renderiza o SVG a 4× e reduz, pra borda lisa.
+  await sharp(Buffer.from(BADGE_SVG), { density: 288 })
+    .resize(96, 96)
+    .png()
+    .toFile(path.join(OUT, "badge-96.png"));
 
   // PWA
   await full().resize(192, 192).png().toFile(path.join(OUT, "icon-192.png"));

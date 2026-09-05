@@ -24,7 +24,12 @@ const VAPID = {
 };
 
 const state = vi.hoisted(() => ({
-  user: null as { id: string; name: string; role: "admin" | "member" } | null,
+  user: null as {
+    id: string;
+    name: string;
+    role: "admin" | "member";
+    avatarId?: string | null;
+  } | null,
 }));
 
 const webpush = vi.hoisted(() => ({
@@ -263,6 +268,16 @@ describe("removePushSubscription", () => {
 });
 
 describe("callGroup", () => {
+  it("leva a foto de quem chamou como ícone da notificação", async () => {
+    await subscribe("bia-celular", BIA.id);
+    state.user = { ...ANA, avatarId: "abcdefghijklmnop" };
+
+    expect(await actions.callGroup(SEBO)).toMatchObject({ ok: true, sent: 1 });
+
+    const payload = JSON.parse(webpush.sendNotification.mock.calls[0][1] as string);
+    expect(payload).toMatchObject({ icon: "/api/uploads/abcdefghijklmnop?v=thumb" });
+  });
+
   it("manda pra todo mundo menos quem chamou e grava o disparo", async () => {
     await subscribe("ana-celular", ANA.id);
     await subscribe("bia-celular", BIA.id);
@@ -392,6 +407,16 @@ describe("callGroup", () => {
 describe("sendAdminNotification", () => {
   beforeEach(() => {
     state.user = CADU;
+  });
+
+  it("aviso do admin não leva foto: o SW mostra o ícone do app", async () => {
+    await subscribe("ana-celular", ANA.id);
+    state.user = { ...CADU, avatarId: "abcdefghijklmnop" };
+
+    expect(await actions.sendAdminNotification(EMPTY, form(AVISO))).toMatchObject({ ok: true });
+
+    const payload = JSON.parse(webpush.sendNotification.mock.calls[0][1] as string);
+    expect(payload).not.toHaveProperty("icon");
   });
 
   it("manda pra todo mundo e guarda o histórico", async () => {

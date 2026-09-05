@@ -13,7 +13,7 @@ import { db } from "@/lib/db/client";
 import { notifications, places, postComments, postReactions, posts } from "@/lib/db/schema";
 import { notifyMentions } from "@/lib/notify-mentions";
 import { commentNotificationBody, postInputSchema } from "@/lib/posts";
-import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
+import { avatarIcon, isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isReactionEmoji } from "@/lib/reviews";
 import { discardStagedImport, takeStagedImport } from "@/lib/staged-imports";
@@ -199,7 +199,7 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
   if (input.body) {
     await notifyMentions({
       text: input.body,
-      author: { id: user.id, name: user.name },
+      author: { id: user.id, name: user.name, avatarId: user.avatarId },
       where: "post",
       url: `/feed#post-${postId}`,
       placeId: place?.id ?? null,
@@ -267,13 +267,14 @@ async function findPost(postId: string) {
  */
 async function notifyPostAuthor(
   post: { id: string; userId: string; placeId: string | null },
-  commenter: { id: string; name: string },
+  commenter: { id: string; name: string; avatarId: string | null },
   comment: string,
 ) {
   const payload: PushPayload = {
     title: "E o narga?",
     body: commentNotificationBody(commenter.name, comment),
     url: `/feed#post-${post.id}`,
+    icon: avatarIcon(commenter.avatarId),
     // Vários comentários no mesmo post trocam o balão em vez de empilhar.
     tag: `comment:${post.id}`,
   };
@@ -356,7 +357,11 @@ export async function addPostComment(_prev: FormState, formData: FormData): Prom
   // ele já está gravado, o aviso é bônus.
   if (post.userId !== user.id && isPushEnabled()) {
     try {
-      await notifyPostAuthor(post, { id: user.id, name: user.name }, data.body);
+      await notifyPostAuthor(
+        post,
+        { id: user.id, name: user.name, avatarId: user.avatarId },
+        data.body,
+      );
     } catch {
       // Sem aviso desta vez; o comentário continua no feed.
     }
@@ -364,7 +369,7 @@ export async function addPostComment(_prev: FormState, formData: FormData): Prom
   // Menções no comentário: quem foi citado leva push, menos o dono do post (que já levou).
   await notifyMentions({
     text: data.body,
-    author: { id: user.id, name: user.name },
+    author: { id: user.id, name: user.name, avatarId: user.avatarId },
     where: "comment",
     url: `/feed#post-${post.id}`,
     exclude: post.userId !== user.id ? [post.userId] : [],

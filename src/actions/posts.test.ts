@@ -24,7 +24,12 @@ const AQUI = { lat: "-27.5975", lng: "-48.55" };
 
 // Quem está logado e pra onde a action redirecionou (mesmo padrão de places.test.ts).
 const state = vi.hoisted(() => ({
-  user: null as { id: string; name: string; role: "admin" | "member" } | null,
+  user: null as {
+    id: string;
+    name: string;
+    role: "admin" | "member";
+    avatarId?: string | null;
+  } | null,
   redirects: [] as string[],
 }));
 
@@ -846,5 +851,46 @@ describe("menções (@Nome:)", () => {
     await expectRedirect({ ...AQUI, body: "@Bia: oi" });
     expect(pushes()).toEqual([]);
     expect(await db.select().from(schema.notifications)).toHaveLength(0);
+  });
+});
+
+describe("ícone da notificação", () => {
+  function payloads(): Record<string, unknown>[] {
+    return webpush.sendNotification.mock.calls.map(
+      (call) => JSON.parse(call[1] as string) as Record<string, unknown>,
+    );
+  }
+
+  it("comentário leva a foto de quem comentou; sem foto, o campo nem vai", async () => {
+    const id = await seedTextPost(); // post da Ana
+    await subscribe("ana-celular", ANA.id);
+
+    state.user = { ...BIA, avatarId: "abcdefghijklmnop" };
+    expect(await actions.addPostComment(empty, form({ postId: id, body: "olha a foto" }))).toEqual({
+      ok: true,
+    });
+    expect(payloads()).toEqual([
+      expect.objectContaining({ icon: "/api/uploads/abcdefghijklmnop?v=thumb" }),
+    ]);
+
+    webpush.sendNotification.mockClear();
+    state.user = BIA;
+    expect(await actions.addPostComment(empty, form({ postId: id, body: "sem foto" }))).toEqual({
+      ok: true,
+    });
+    expect(payloads()).toHaveLength(1);
+    expect(payloads()[0]).not.toHaveProperty("icon");
+  });
+
+  it("menção leva a foto de quem mencionou", async () => {
+    await subscribe("bia-celular", BIA.id);
+    state.user = { ...ANA, avatarId: "abcdefghijklmnop" };
+    await expectRedirect({ ...AQUI, body: "@Bia: olha a foto" });
+    expect(payloads()).toEqual([
+      expect.objectContaining({
+        body: "Ana te mencionou num post: “@Bia: olha a foto”",
+        icon: "/api/uploads/abcdefghijklmnop?v=thumb",
+      }),
+    ]);
   });
 });

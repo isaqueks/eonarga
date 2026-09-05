@@ -95,7 +95,7 @@ export function InstallAppButton({ className }: { className?: string }) {
         className={cn(
           "relative h-14 w-full justify-start gap-3 overflow-hidden rounded-xl px-4 text-base font-bold",
           "bg-primary text-primary-foreground hover:bg-primary/90",
-          "shadow-[0_10px_30px_-8px_var(--primary)] ring-2 ring-primary/40 ring-offset-2 ring-offset-background",
+          "ring-primary/40 ring-offset-background shadow-[0_10px_30px_-8px_var(--primary)] ring-2 ring-offset-2",
           className,
         )}
         onClick={install}
@@ -103,16 +103,14 @@ export function InstallAppButton({ className }: { className?: string }) {
         {/* Reflexo que atravessa o botão. Fica fora do fluxo e não recebe clique. */}
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-linear-to-r from-transparent via-white/45 to-transparent motion-safe:animate-shine"
+          className="motion-safe:animate-shine pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-linear-to-r from-transparent via-white/45 to-transparent"
         />
         <span className="bg-primary-foreground/15 flex size-9 shrink-0 items-center justify-center rounded-full">
           <Icon className="size-5" aria-hidden />
         </span>
         <span className="flex min-w-0 flex-col items-start leading-tight">
           <span>Instalar aplicativo</span>
-          <span className="text-xs font-medium opacity-80">
-            Tela cheia e notificação da galera
-          </span>
+          <span className="text-xs font-medium opacity-80">Tela cheia e notificação da galera</span>
         </span>
       </Button>
 

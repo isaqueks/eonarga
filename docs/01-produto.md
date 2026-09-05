@@ -108,6 +108,7 @@ Regras do post:
 - **Importar do Instagram**: cola o link de um post ou reel e o app traz a **primeira mídia** (foto ou vídeo; de carrossel, o primeiro slide) e a **legenda** pra revisar antes de publicar. Reel vem com o vídeo e a capa; vídeo acima de 60 MB e post privado são recusados, e sobra o caminho manual. O post guarda a origem ("📸 @perfil no Instagram", com link). Pelo **Compartilhar** do Instagram (Android com o app instalado) o link chega direto no formulário e a importação começa sozinha.
 - **Menção**: `@Nome: ` no texto de um post, comentário ou resposta de avaliação manda push pra pessoa citada ("Fulano te mencionou num post: “…”"), que abre no lugar certo. Depois de `@` mais três letras aparece o autocomplete da galera; escolher escreve a menção fechada. Nos comentários, o botão "Responder" já começa o texto com `@Nome: `. Citar a si mesmo não apita; o dono do post citado num comentário só leva o push de comentário, não os dois.
 - Comentário no post de outra pessoa manda um **push** só pra quem postou ("Fulano comentou no seu post: “…”"), que abre o feed já no post. Comentar no próprio post não apita, e quem não ligou as notificações simplesmente não recebe.
+- A notificação chega com a **foto de quem agiu** (comentou, mencionou, chamou a galera) como ícone e um narguilé branco como badge na barra de status. Sem foto, ou num aviso do admin, aparece o rosto do cachorro. iPhone ignora isso e mostra o ícone do app.
 
 ## Não-objetivos (de propósito)
 

@@ -25,7 +25,12 @@ const REVIEW_ID = "rev-ana";
 const ARCHIVED_REVIEW_ID = "rev-morto";
 
 const state = vi.hoisted(() => ({
-  user: null as { id: string; name?: string; role: "admin" | "member" } | null,
+  user: null as {
+    id: string;
+    name?: string;
+    role: "admin" | "member";
+    avatarId?: string | null;
+  } | null,
 }));
 
 // Menção numa resposta vira push: o web-push vira um espião aqui.
@@ -348,7 +353,7 @@ describe("menção numa resposta", () => {
       auth: "a",
     });
 
-    state.user = { ...ANA, name: "Ana" };
+    state.user = { ...ANA, name: "Ana", avatarId: "abcdefghijklmnop" };
     expect(
       await actions.addComment(empty, form({ reviewId: REVIEW_ID, body: "@Bia: concorda?" })),
     ).toEqual({ ok: true });
@@ -357,9 +362,11 @@ describe("menção numa resposta", () => {
     const payload = JSON.parse(webpush.sendNotification.mock.calls[0][1] as string) as {
       body: string;
       url: string;
+      icon: string;
     };
     expect(payload.body).toBe("Ana te mencionou num comentário: “@Bia: concorda?”");
     expect(payload.url).toBe(`/lugares/${PLACE_SLUG}#avaliacoes`);
+    expect(payload.icon).toBe("/api/uploads/abcdefghijklmnop?v=thumb");
     expect((await db.select().from(schema.notifications))[0]).toMatchObject({
       kind: "mention",
       targetUserId: BIA.id,

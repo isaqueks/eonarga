@@ -1,3 +1,4 @@
+import { avatarUrl } from "@/lib/avatar-url";
 import { cn } from "@/lib/utils";
 
 export type AvatarSize = "sm" | "md" | "lg" | "xl";
@@ -63,7 +64,7 @@ export function UserAvatar({
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={`/api/uploads/${avatarId}?v=thumb`}
+        src={avatarUrl(avatarId)}
         alt={name}
         width={px}
         height={px}
