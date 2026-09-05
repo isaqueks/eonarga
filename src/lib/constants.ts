@@ -13,6 +13,11 @@ export const CONTENT_TEXT_MAX = 5000;
 /** Teto do HTML cru. Marcação pesada cabe folgada; payload gigante não passa. */
 export const CONTENT_HTML_MAX = 40_000;
 
+/** Foto de post ou de lugar: até 10 MB antes do reprocessamento (o formulário confere antes de subir). */
+export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+/** Vídeo de post: 60 MB, guardado como veio (docs/08 #39). */
+export const VIDEO_MAX_BYTES = 60 * 1024 * 1024;
+
 /** Resposta numa avaliação: texto puro, curto de propósito (é thread, não ensaio). */
 export const COMMENT_MAX = 500;
 

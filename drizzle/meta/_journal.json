@@ -64,6 +64,13 @@
       "when": 1788481558275,
       "tag": "0008_importar-instagram",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788565449376,
+      "tag": "0009_videos-em-posts",
+      "breakpoints": true
     }
   ]
 }

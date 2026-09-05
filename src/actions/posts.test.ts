@@ -242,7 +242,7 @@ describe("createPost", () => {
     const result = await actions.createPost(empty, form(AQUI));
     expect(result).toEqual({
       ok: false,
-      fieldErrors: { body: "Manda uma foto ou escreve alguma coisa." },
+      fieldErrors: { body: "Manda uma foto, um vídeo ou escreve alguma coisa." },
     });
     expect(await db.select().from(schema.posts)).toHaveLength(0);
   });
@@ -298,7 +298,7 @@ describe("createPost", () => {
     );
     expect(result).toEqual({
       ok: false,
-      fieldErrors: { photo: "Isso não é uma imagem que eu reconheça." },
+      fieldErrors: { photo: "Isso não é foto nem vídeo que eu reconheça." },
     });
     expect(await db.select().from(schema.posts)).toHaveLength(0);
     expect(fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir).length : 0).toBe(antes);
@@ -597,6 +597,8 @@ describe("createPost com foto importada do Instagram", () => {
       userId: as.id,
       width: saved.width,
       height: saved.height,
+      videoExt: null,
+      posterId: null,
       sourceUrl: "https://www.instagram.com/p/C8Zxn3JJhcG/",
       sourceAuthor: "nasa",
     });
@@ -655,5 +657,115 @@ describe("createPost com foto importada do Instagram", () => {
     expect(post.photoId).not.toBe(photoId);
     expect(post.sourceUrl).toBeNull();
     expect(fileExists(photoId, ".webp")).toBe(false);
+  });
+});
+
+describe("createPost com vídeo", () => {
+  const FIXTURES = path.resolve("e2e/fixtures");
+  const mp4 = () => fs.readFileSync(path.join(FIXTURES, "tiny.mp4"));
+  const webm = () => fs.readFileSync(path.join(FIXTURES, "tiny.webm"));
+
+  function videoFile(buffer: Buffer, name = "rolê.mp4", type = "video/mp4"): File {
+    return new File([new Uint8Array(buffer)], name, { type });
+  }
+
+  it("publica um MP4 da galeria, com as dimensões lidas do arquivo", async () => {
+    const fd = form({ ...AQUI, body: "Olha o narga" });
+    fd.set("media", videoFile(mp4()));
+    state.redirects.length = 0;
+    await expect(actions.createPost(empty, fd)).rejects.toThrow(/NEXT_REDIRECT/);
+
+    const post = await onlyPost();
+    expect(post).toMatchObject({
+      body: "Olha o narga",
+      photoId: null,
+      videoExt: "mp4",
+      videoWidth: 32,
+      videoHeight: 24,
+    });
+    expect(post.videoId).toBeTruthy();
+    expect(fs.existsSync(path.join(uploadDir, `${post.videoId}.mp4`))).toBe(true);
+  });
+
+  it("WebM entra com a proporção que o navegador informou; sem texto também vale", async () => {
+    const fd = form({ ...AQUI, videoWidth: "640", videoHeight: "360" });
+    fd.set("video", videoFile(webm(), "gravado.webm", "video/webm"));
+    await expect(actions.createPost(empty, fd)).rejects.toThrow(/NEXT_REDIRECT/);
+
+    expect(await onlyPost()).toMatchObject({
+      body: null,
+      videoExt: "webm",
+      videoWidth: 640,
+      videoHeight: 360,
+    });
+  });
+
+  it("recusa vídeo grande demais e arquivo que não é foto nem vídeo", async () => {
+    const big = new File([new Uint8Array(60 * 1024 * 1024 + 1)], "grande.mp4", {
+      type: "video/mp4",
+    });
+    const fd = form({ ...AQUI, body: "x" });
+    fd.set("video", big);
+    expect(await actions.createPost(empty, fd)).toEqual({
+      ok: false,
+      fieldErrors: { photo: "Vídeo grande demais (máximo 60 MB)." },
+    });
+
+    const fd2 = form({ ...AQUI, body: "x" });
+    fd2.set("media", videoFile(Buffer.from("isso nao e video nenhum, so texto"), "x.mp4"));
+    expect(await actions.createPost(empty, fd2)).toEqual({
+      ok: false,
+      fieldErrors: { photo: "Isso não é foto nem vídeo que eu reconheça." },
+    });
+    expect(await db.select().from(schema.posts)).toHaveLength(0);
+  });
+
+  it("a galeria também aceita foto", async () => {
+    const fd = form({ ...AQUI, body: "foto pela galeria" });
+    fd.set("media", await photoFile());
+    await expect(actions.createPost(empty, fd)).rejects.toThrow(/NEXT_REDIRECT/);
+    const post = await onlyPost();
+    expect(post.photoId).toBeTruthy();
+    expect(post.videoId).toBeNull();
+  });
+
+  it("apagar o post apaga o vídeo", async () => {
+    const fd = form({ ...AQUI, body: "some" });
+    fd.set("media", videoFile(mp4()));
+    await expect(actions.createPost(empty, fd)).rejects.toThrow(/NEXT_REDIRECT/);
+    const post = await onlyPost();
+
+    expect(await actions.deletePost(post.id)).toEqual({ ok: true });
+    expect(fs.existsSync(path.join(uploadDir, `${post.videoId}.mp4`))).toBe(false);
+  });
+
+  it("reel importado vira post com vídeo e a capa como foto", async () => {
+    const { saveImage } = await import("@/lib/storage");
+    const { saveVideo } = await import("@/lib/video-storage");
+    const { stageImport } = await import("@/lib/staged-imports");
+    const video = await saveVideo(mp4(), "mp4");
+    const poster = await saveImage(await png(), { maxSize: 1600, thumbSize: 400 });
+    stageImport({
+      id: video.id,
+      userId: ANA.id,
+      width: 1080,
+      height: 1920,
+      videoExt: "mp4",
+      posterId: poster.id,
+      sourceUrl: "https://www.instagram.com/reel/DX7PnqbFL50/",
+      sourceAuthor: "nasainternships",
+    });
+
+    await expectRedirect({ ...AQUI, body: "reel", importedPhotoId: video.id });
+
+    expect(await onlyPost()).toMatchObject({
+      videoId: video.id,
+      videoExt: "mp4",
+      videoWidth: 1080,
+      videoHeight: 1920,
+      photoId: poster.id,
+      sourceUrl: "https://www.instagram.com/reel/DX7PnqbFL50/",
+      sourceAuthor: "nasainternships",
+    });
   });
 });

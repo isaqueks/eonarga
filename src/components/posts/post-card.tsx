@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 import { PostMenu } from "./post-menu";
 import { PostPhoto } from "./post-photo";
+import { PostVideo } from "./post-video";
 
 /**
  * Um post no feed. Server component: o "há 5 min" é calculado uma vez, no servidor,
@@ -72,7 +73,15 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
         </p>
       ) : null}
 
-      {post.photo ? <PostPhoto photo={post.photo} authorName={post.author.name} /> : null}
+      {post.video ? (
+        <PostVideo
+          video={post.video}
+          poster={post.photo?.url ?? null}
+          authorName={post.author.name}
+        />
+      ) : post.photo ? (
+        <PostPhoto photo={post.photo} authorName={post.author.name} />
+      ) : null}
 
       {post.body ? (
         <p className="text-[0.9375rem] leading-snug whitespace-pre-line">{post.body}</p>

@@ -1,4 +1,5 @@
 import { deleteImage } from "@/lib/storage";
+import { deleteVideo, type VideoExt } from "@/lib/video-storage";
 
 /**
  * Foto importada do Instagram que ainda não virou post: fica "no palco" até a pessoa
@@ -7,12 +8,16 @@ import { deleteImage } from "@/lib/storage";
  * apagados, pra o disco não juntar foto órfã.
  */
 export interface StagedImport {
-  /** Id da imagem no storage (`src/lib/storage.ts`). */
+  /** Id da mídia principal no storage: a foto, ou o vídeo (`src/lib/video-storage.ts`). */
   id: string;
   /** Quem importou: só essa pessoa pode publicar ou descartar. */
   userId: string;
   width: number;
   height: number;
+  /** Extensão do vídeo; `null` quando a mídia é foto. */
+  videoExt: VideoExt | null;
+  /** Capa do vídeo (id de imagem), quando o embed tinha uma. */
+  posterId: string | null;
   sourceUrl: string;
   sourceAuthor: string | null;
   expiresAt: number;
@@ -34,12 +39,22 @@ export function stageImport(
   return value;
 }
 
+/** Apaga os arquivos de uma entrada: a foto, ou o vídeo e a capa. */
+async function deleteFiles(entry: StagedImport): Promise<void> {
+  if (entry.videoExt) {
+    await deleteVideo(entry.id);
+    if (entry.posterId) await deleteImage(entry.posterId);
+  } else {
+    await deleteImage(entry.id);
+  }
+}
+
 function find(id: string, userId: string, now: number): StagedImport | null {
   const entry = staged.get(id);
   if (!entry || entry.userId !== userId) return null;
   if (entry.expiresAt <= now) {
     staged.delete(id);
-    void deleteImage(id);
+    void deleteFiles(entry);
     return null;
   }
   return entry;
@@ -70,7 +85,7 @@ export async function discardStagedImport(id: string, userId: string): Promise<b
   const entry = staged.get(id);
   if (!entry || entry.userId !== userId) return false;
   staged.delete(id);
-  await deleteImage(id);
+  await deleteFiles(entry);
   return true;
 }
 
@@ -78,7 +93,7 @@ export async function discardStagedImport(id: string, userId: string): Promise<b
 export async function sweepStagedImports(now: number = Date.now()): Promise<number> {
   const expired = [...staged.values()].filter((entry) => entry.expiresAt <= now);
   for (const entry of expired) staged.delete(entry.id);
-  await Promise.all(expired.map((entry) => deleteImage(entry.id)));
+  await Promise.all(expired.map((entry) => deleteFiles(entry)));
   return expired.length;
 }
 

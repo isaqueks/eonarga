@@ -14,6 +14,8 @@ import path from "node:path";
 import { nanoid } from "nanoid";
 import sharp, { type OutputInfo } from "sharp";
 
+import { PHOTO_MAX_BYTES } from "@/lib/constants";
+
 export type ImageVariant = "full" | "thumb";
 
 export interface StoredImage {
@@ -27,7 +29,7 @@ export interface StoredImage {
 export const UPLOAD_DIR: string = path.resolve(process.env.UPLOAD_DIR ?? "./data/uploads");
 
 /** 10 MB. Foto de celular passa folgada; PDF disfarçado de foto não. */
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = PHOTO_MAX_BYTES;
 
 export const ACCEPTED_MIME = [
   "image/jpeg",

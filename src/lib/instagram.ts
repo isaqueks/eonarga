@@ -5,7 +5,10 @@
  * O Instagram não tem API pública pra isso. O caminho é a página de embed
  * (`/p/<código>/embed/captioned/`), que vem renderizada no servidor pra user-agents
  * que não são navegador. É frágil por natureza: se o Instagram mudar o HTML, a
- * importação quebra e sobra o caminho manual (foto + texto).
+ * importação quebra e sobra o caminho manual (foto/vídeo + texto).
+ *
+ * Reel e vídeo (docs/08 #39): o JSON do embed traz `video_url`, a capa (`display_url`)
+ * e as dimensões. Carrossel leva o primeiro slide, seja foto ou vídeo.
  */
 
 /** User-agent honesto: o Instagram entrega o HTML pronto pra quem não é navegador. */
@@ -43,10 +46,10 @@ export function embedUrlFor(shortcode: string): string {
 }
 
 /**
- * De onde a imagem pode vir: só a CDN do Instagram/Facebook, sempre https. Qualquer
- * outro host é recusado antes do fetch (anti-SSRF, docs/05).
+ * De onde a foto ou o vídeo pode vir: só a CDN do Instagram/Facebook, sempre https.
+ * Qualquer outro host é recusado antes do fetch (anti-SSRF, docs/05).
  */
-export function isInstagramImageUrl(value: string): boolean {
+export function isInstagramMediaUrl(value: string): boolean {
   let url: URL;
   try {
     url = new URL(value);
@@ -60,16 +63,29 @@ export function isInstagramImageUrl(value: string): boolean {
   );
 }
 
+export type ParsedMedia =
+  | { kind: "photo"; imageUrl: string }
+  | {
+      kind: "video";
+      videoUrl: string;
+      /** A capa (o `display_url` do vídeo). */
+      posterUrl: string | null;
+      width: number | null;
+      height: number | null;
+      durationSec: number | null;
+    };
+
 export type ParsedEmbed =
   | {
       ok: true;
-      /** A primeira foto (num carrossel, o primeiro slide que não é vídeo). */
-      imageUrl: string;
+      /** O primeiro slide: foto ou vídeo. */
+      media: ParsedMedia;
       caption: string | null;
       username: string | null;
       /** Quantos slides tinha (1 fora de carrossel). */
       slides: number;
     }
+  /** `video`: é vídeo, mas o embed não entregou a URL dele. */
   | { ok: false; reason: "video" | "not-found" };
 
 const NAMED_ENTITIES: Record<string, string> = {
@@ -114,6 +130,14 @@ interface MediaNode {
   typename: string | null;
   isVideo: boolean;
   displayUrl: string | null;
+  videoUrl: string | null;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+}
+
+function num(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 interface EmbedContext {
@@ -125,11 +149,34 @@ interface EmbedContext {
 
 function toNode(raw: unknown): MediaNode {
   const node = (raw ?? {}) as Record<string, unknown>;
+  const dims = (node.dimensions ?? {}) as { width?: unknown; height?: unknown };
   return {
     typename: typeof node.__typename === "string" ? node.__typename : null,
     isVideo: node.is_video === true,
     displayUrl: typeof node.display_url === "string" ? node.display_url : null,
+    videoUrl: typeof node.video_url === "string" ? node.video_url : null,
+    width: num(dims.width),
+    height: num(dims.height),
+    duration: num(node.video_duration),
   };
+}
+
+/** Foto ou vídeo de um nó do JSON; sem imagem no JSON, cai na do HTML. */
+function mediaFrom(node: MediaNode, html: string): ParsedMedia | { error: "video" | "not-found" } {
+  if (node.isVideo || node.typename === "GraphVideo") {
+    if (!node.videoUrl) return { error: "video" };
+    return {
+      kind: "video",
+      videoUrl: node.videoUrl,
+      posterUrl: node.displayUrl,
+      width: node.width,
+      height: node.height,
+      durationSec: node.duration,
+    };
+  }
+  const imageUrl = node.displayUrl ?? imageFromHtml(html);
+  if (!imageUrl) return { error: "not-found" };
+  return { kind: "photo", imageUrl };
 }
 
 /**
@@ -195,9 +242,9 @@ function captionFromHtml(html: string): string | null {
 }
 
 /**
- * Lê a página de embed. Foto única, carrossel (primeiro slide que não é vídeo) e a
- * legenda; reel/vídeo é recusado e "sem imagem nenhuma" vira `not-found` (post
- * privado, apagado ou HTML que mudou).
+ * Lê a página de embed. Foto única, carrossel (primeiro slide, foto ou vídeo), reel e
+ * a legenda. "Sem mídia nenhuma" vira `not-found` (post privado, apagado ou HTML que
+ * mudou); vídeo sem URL no JSON vira `video`.
  */
 export function parseInstagramEmbed(html: string): ParsedEmbed {
   const context = parseContextJson(html);
@@ -206,24 +253,20 @@ export function parseInstagramEmbed(html: string): ParsedEmbed {
 
   if (context) {
     const { media, children } = context;
-    if (children.length > 0) {
-      const photo = children.find((child) => !child.isVideo && child.displayUrl);
-      if (!photo?.displayUrl) return { ok: false, reason: "video" };
-      return { ok: true, imageUrl: photo.displayUrl, caption, username, slides: children.length };
-    }
-    if (media.isVideo || media.typename === "GraphVideo") return { ok: false, reason: "video" };
-    const imageUrl = media.displayUrl ?? imageFromHtml(html);
-    if (!imageUrl) return { ok: false, reason: "not-found" };
-    return { ok: true, imageUrl, caption, username, slides: 1 };
+    const first = children.length > 0 ? children[0] : media;
+    const result = mediaFrom(first, html);
+    if ("error" in result) return { ok: false, reason: result.error };
+    return { ok: true, media: result, caption, username, slides: children.length || 1 };
   }
 
-  // Sem JSON: é foto única, desde que o HTML tenha a imagem e nenhum sinal de vídeo.
+  // Sem JSON é foto única (vídeo sempre vem com JSON), desde que o HTML tenha a
+  // imagem e nenhum sinal de vídeo.
   if (/EmbeddedMediaVideo|class="EmbedPlayButton"|WatchOnInstagram/.test(html)) {
     return { ok: false, reason: "video" };
   }
   const imageUrl = imageFromHtml(html);
   if (!imageUrl) return { ok: false, reason: "not-found" };
-  return { ok: true, imageUrl, caption, username, slides: 1 };
+  return { ok: true, media: { kind: "photo", imageUrl }, caption, username, slides: 1 };
 }
 
 /** Legenda cabe no post? Passou do limite, corta e avisa com reticências. */

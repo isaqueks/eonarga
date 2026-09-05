@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
     serverActions: {
       // O padrão do Next é 1 MB e a foto de perfil pode ter até 10 MB (MAX_UPLOAD_BYTES);
       // a folga cobre o overhead do multipart. Quem valida o tamanho de fato é a action.
-      bodySizeLimit: "11mb",
+      bodySizeLimit: "64mb",
     },
   },
   async headers() {
@@ -74,7 +74,7 @@ function securityHeaders() {
     `connect-src 'self'${dev ? " ws: wss:" : ""} https://tile.openstreetmap.org https://cloudflareinsights.com`,
     "worker-src 'self' blob:",
     "manifest-src 'self'",
-    "media-src 'self'",
+    "media-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

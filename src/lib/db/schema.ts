@@ -277,6 +277,12 @@ export const posts = sqliteTable(
     lat: real("lat").notNull(),
     lng: real("lng").notNull(),
     address: text("address"),
+    // Vídeo do post (docs/08 #39): id no storage + extensão (`mp4`/`webm`) e dimensões.
+    // Com vídeo, `photo_id` (se houver) é a capa.
+    videoId: text("video_id"),
+    videoExt: text("video_ext"),
+    videoWidth: integer("video_width"),
+    videoHeight: integer("video_height"),
     // Post importado do Instagram (docs/08 #37): o link canônico e o perfil de origem.
     sourceUrl: text("source_url"),
     sourceAuthor: text("source_author"),

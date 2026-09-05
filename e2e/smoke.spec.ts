@@ -446,15 +446,13 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   expect(manifest.share_target).toMatchObject({ action: "/feed/novo", method: "GET" });
   await page.goto("/feed/novo?text=Olha%20isso%20a%C3%AD");
   await expect(page.getByLabel("Texto do post")).toHaveValue("Olha isso aí");
-  // Link do Instagram já abre a caixa de importar com o link preenchido (a busca em si
-  // depende do Instagram e não roda aqui).
-  await page.goto("/feed/novo?text=https%3A%2F%2Fwww.instagram.com%2Freel%2FDX7PnqbFL50%2F");
+  // Link do Instagram já abre a caixa de importar com o link preenchido. A busca em si
+  // depende do Instagram e não é conferida aqui; o código inexistente mantém qualquer
+  // resposta pequena (nada de baixar um reel de 40 MB no meio do teste).
+  await page.goto("/feed/novo?text=https%3A%2F%2Fwww.instagram.com%2Freel%2Fzzzzzzzzzzz%2F");
   await expect(page.getByLabel("Cola o link do post")).toHaveValue(
-    "https://www.instagram.com/reel/DX7PnqbFL50/",
+    "https://www.instagram.com/reel/zzzzzzzzzzz/",
   );
-  await expect(page.getByText("Só entra post com foto. Reel e vídeo não.")).toBeVisible({
-    timeout: 15_000,
-  });
   await page.goto("/feed", { waitUntil: "networkidle" });
 
   // --- Post 1: lugar da lista + texto ---------------------------------------
@@ -586,6 +584,46 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   // Sem lugar cadastrado, a linha "de onde" leva pro Maps por coordenada.
   await expect(cardFoto.locator('a[href^="https://www.google.com/maps/search/"]')).toBeVisible();
   await shot(page, "22-feed-com-posts");
+
+  // --- Post 3: vídeo da galeria -----------------------------------------------
+  await page.getByText("📸 Postar").click();
+  await expect(page).toHaveURL(/\/feed\/novo$/);
+  const mp4 = fs.readFileSync(path.resolve("e2e/fixtures/tiny.mp4"));
+  const previaVideo = page.getByLabel("Prévia do vídeo");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page
+      .locator('input[name="media"]')
+      .setInputFiles({ name: "rolê.mp4", mimeType: "video/mp4", buffer: mp4 });
+    try {
+      await expect(previaVideo).toBeVisible({ timeout: 5_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  await expect(previaVideo).toBeVisible();
+  await page.getByLabel("Texto do post").fill("Vídeo do rolê");
+  await abrirOnde(page);
+  await page.getByRole("button", { name: "Escolher lugar" }).click();
+  await page.getByRole("button", { name: /Sebo do João/ }).click();
+  const publicar3 = page.getByRole("button", { name: "Publicar" });
+  await expect(publicar3).toBeEnabled();
+  await publicar3.click();
+  await page.waitForURL(/\/feed$/);
+
+  const cardVideo = page.locator("article").filter({ hasText: "Vídeo do rolê" });
+  const video = cardVideo.getByLabel("Vídeo de Admin");
+  await expect(video).toBeVisible({ timeout: 30_000 });
+  const videoSrc = (await video.getAttribute("src")) ?? "";
+  expect(videoSrc).toMatch(/^\/api\/videos\/[A-Za-z0-9_-]+\.mp4#t=0\.001$/);
+  // O `<video>` busca por trechos: a rota tem que responder 206 com Range.
+  const parcial = await page.request.get(videoSrc.split("#")[0], {
+    headers: { range: "bytes=0-99" },
+  });
+  expect(parcial.status()).toBe(206);
+  expect(parcial.headers()["content-range"]).toMatch(/^bytes 0-99\/\d+$/);
+  expect((await parcial.body()).byteLength).toBe(100);
+  await shot(page, "22b-feed-com-video");
 
   // --- Apagar o post da foto pelo menu "⋯" ----------------------------------
   const apagar = page.getByRole("menuitem", { name: /Apagar/ });

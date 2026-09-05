@@ -94,17 +94,18 @@ Não existe visitante anônimo: tudo exige login.
 O `/feed` é a linha do tempo do grupo. Duas coisas convivem lá:
 
 - **Novidades** (automáticas): avaliação nova, lugar novo, "quero ir"/"já fui", reação e "chamar galera". Avaliação aparece como **card** (nota em nargas, veredito e prévia do texto, com link pra ficha); o resto continua sendo uma linha curta.
-- **Posts** (escritos à mão, botão "📸 Postar"): **foto e/ou texto** (pelo menos um dos dois) e **sempre com quem postou e de onde**.
+- **Posts** (escritos à mão, botão "📸 Postar"): **foto ou vídeo, e/ou texto** (pelo menos um) e **sempre com quem postou e de onde**.
 
 Regras do post:
 
 - "De onde" é obrigatório e vem de um dos três jeitos: **onde estou** (GPS + endereço por reverse geocoding; se tiver um lugar cadastrado a menos de 150 m, o app pergunta "Você tá no Sebo do João?"), **escolher lugar** (lista com busca, ordenada por distância quando tem GPS) ou **marcar no mapa** (o mesmo pino do cadastro de lugar).
 - Com lugar escolhido, a coordenada e o endereço são os do lugar; sem lugar, ficam a coordenada do GPS/mapa e o endereço do reverse geocoding (ou só a coordenada, se ele não responder).
 - Texto puro, até 1000 caracteres, com quebras de linha. Foto reprocessada pelo sharp (webp, sem EXIF), igual às fotos de lugar.
+- **Vídeo** (gravado na hora ou da galeria): MP4/MOV ou WebM, até 60 MB, guardado como veio (sem transcodificar; o celular já grava H.264). O card mostra o player com a proporção certa e altura limitada; vídeo de iPhone em HEVC pode não tocar em Android, e aí é regravar em "mais compatível".
 - Post **fica pra sempre** na timeline. Quem apaga é quem postou (ou admin), e a imagem some junto.
 - Limite de 20 posts por hora por pessoa ("Calma, influencer."). Não é moderação: é pra ninguém entupir o feed sem querer.
 - Dá pra **reagir** (os mesmos emojis das avaliações) e **comentar** (thread curta, texto puro, até 500 caracteres) em qualquer post. Comentário some pela mão de quem escreveu, de quem postou ou do admin. Reação em post também vira linha nas novidades ("Fulano reagiu 😂 no post de Ciclano em X"); comentário não, fica só no card.
-- **Importar do Instagram**: cola o link de um post e o app traz a **primeira foto** (de carrossel, o primeiro slide que não é vídeo) e a **legenda** pra revisar antes de publicar; reel, vídeo e post privado são recusados, e sobra o caminho manual. O post guarda a origem ("📸 @perfil no Instagram", com link). Pelo **Compartilhar** do Instagram (Android com o app instalado) o link chega direto no formulário e a importação começa sozinha.
+- **Importar do Instagram**: cola o link de um post ou reel e o app traz a **primeira mídia** (foto ou vídeo; de carrossel, o primeiro slide) e a **legenda** pra revisar antes de publicar. Reel vem com o vídeo e a capa; vídeo acima de 60 MB e post privado são recusados, e sobra o caminho manual. O post guarda a origem ("📸 @perfil no Instagram", com link). Pelo **Compartilhar** do Instagram (Android com o app instalado) o link chega direto no formulário e a importação começa sozinha.
 - Comentário no post de outra pessoa manda um **push** só pra quem postou ("Fulano comentou no seu post: “…”"), que abre o feed já no post. Comentar no próprio post não apita, e quem não ligou as notificações simplesmente não recebe.
 
 ## Não-objetivos (de propósito)

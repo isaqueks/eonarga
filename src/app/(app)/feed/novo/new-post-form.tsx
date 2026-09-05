@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { extractInstagramLink } from "@/lib/instagram";
 import { formatLatLng, haversineMeters, nearestPlace, POST_BODY_MAX } from "@/lib/posts";
+import { PHOTO_MAX_BYTES, VIDEO_MAX_BYTES } from "@/lib/constants";
 import type { PostPlaceOption } from "@/lib/queries/posts";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,12 @@ interface Chosen {
 }
 
 const NO_GPS = "Sem GPS. Escolhe o lugar ou marca no mapa.";
+const VIDEO_TOO_BIG = "Vídeo grande demais (máximo 60 MB). Corta ele antes.";
+const PHOTO_TOO_BIG = "Foto grande demais (máximo 10 MB).";
+
+/** O que está na prévia: um arquivo escolhido ou a mídia importada do Instagram. */
+type Preview =
+  { kind: "image"; url: string } | { kind: "video"; url: string; poster: string | null };
 
 /** Endereço a partir do ponto (Nominatim pelo servidor). Sem resposta, fica a coordenada. */
 async function fetchAddress(lat: number, lng: number): Promise<string | null> {
@@ -86,9 +93,16 @@ export function NewPostForm({
     [sharedText],
   );
   const [body, setBody] = useState(() => (sharedText && !sharedLink ? sharedText.trim() : ""));
-  const [preview, setPreview] = useState<string | null>(null);
-  const [hasPhoto, setHasPhoto] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [hasMedia, setHasMedia] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  // Proporção do vídeo escolhido, lida da prévia: vai pro servidor só pra layout do card.
+  const [videoDims, setVideoDims] = useState<{ width: number; height: number } | null>(null);
+  // Três inputs: câmera de foto, câmera de vídeo e galeria (foto ou vídeo). Só um
+  // deles carrega arquivo por vez; o servidor pega o primeiro que veio.
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // Foto importada do Instagram: já está no storage, "no palco" até publicar (docs/08 #37).
   const [imported, setImported] = useState<{ photoId: string } | null>(null);
@@ -168,11 +182,18 @@ export function NewPostForm({
   }, [locate]);
 
   // A URL do preview de arquivo é do navegador e precisa ser devolvida quando troca
-  // ou sai da tela. A da foto importada é do nosso storage e não precisa.
+  // ou sai da tela. A da mídia importada é do nosso storage e não precisa.
   useEffect(() => {
-    if (!preview || !preview.startsWith("blob:")) return;
-    return () => URL.revokeObjectURL(preview);
+    if (!preview || !preview.url.startsWith("blob:")) return;
+    const url = preview.url;
+    return () => URL.revokeObjectURL(url);
   }, [preview]);
+
+  function clearInputs(except?: HTMLInputElement | null) {
+    for (const ref of [photoInputRef, videoInputRef, galleryInputRef]) {
+      if (ref.current && ref.current !== except) ref.current.value = "";
+    }
+  }
 
   /** Desiste da foto importada: some do palco e do disco. */
   function dropImported() {
@@ -181,32 +202,62 @@ export function NewPostForm({
     setImported(null);
   }
 
-  function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0] ?? null;
-    if (file) dropImported();
-    setHasPhoto(Boolean(file));
-    setPreview(file ? URL.createObjectURL(file) : null);
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0] ?? null;
+    if (!file) return;
+    dropImported();
+    clearInputs(input);
+    setMediaError(null);
+    setVideoDims(null);
+
+    const isVideo = file.type.startsWith("video/");
+    if (isVideo && file.size > VIDEO_MAX_BYTES) {
+      input.value = "";
+      setMediaError(VIDEO_TOO_BIG);
+      return;
+    }
+    if (!isVideo && file.size > PHOTO_MAX_BYTES) {
+      input.value = "";
+      setMediaError(PHOTO_TOO_BIG);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(isVideo ? { kind: "video", url, poster: null } : { kind: "image", url });
+    setHasMedia(true);
   }
 
-  function clearPhoto() {
-    if (photoInputRef.current) photoInputRef.current.value = "";
+  function clearMedia() {
+    clearInputs();
     dropImported();
-    setHasPhoto(false);
+    setHasMedia(false);
     setPreview(null);
+    setVideoDims(null);
+    setMediaError(null);
   }
 
   const importFromInstagram = useCallback((url: string) => {
     setIgError(null);
     startImport(async () => {
       const result = await importInstagramPost(url);
-      if (!result.ok || !result.photoId || !result.url) {
+      if (!result.ok || !result.photoId || (!result.url && !result.videoUrl)) {
         setIgError(result.error ?? "Não rolou importar. Tenta de novo.");
         return;
       }
-      if (photoInputRef.current) photoInputRef.current.value = "";
+      const next: Preview | null =
+        result.kind === "video" && result.videoUrl
+          ? { kind: "video", url: result.videoUrl, poster: result.url ?? null }
+          : result.url
+            ? { kind: "image", url: result.url }
+            : null;
+      if (!next) {
+        setIgError("Não rolou importar. Tenta de novo.");
+        return;
+      }
+      clearInputs();
       setImported({ photoId: result.photoId });
-      setPreview(result.url);
-      setHasPhoto(true);
+      setPreview(next);
+      setHasMedia(true);
       const caption = result.caption;
       if (caption) setBody((current) => (current.trim() === "" ? caption : current));
       setIgOpen(false);
@@ -223,16 +274,7 @@ export function NewPostForm({
     importFromInstagram(sharedLink.url);
   }, [sharedLink, importFromInstagram]);
 
-  /** "Tirar foto" abre a câmera no celular; "Da galeria" deixa o navegador oferecer os arquivos. */
-  function openPhotoPicker(source: "camera" | "gallery") {
-    const input = photoInputRef.current;
-    if (!input) return;
-    if (source === "camera") input.setAttribute("capture", "environment");
-    else input.removeAttribute("capture");
-    input.click();
-  }
-
-  const canPublish = chosen !== null && (hasPhoto || body.trim().length > 0);
+  const canPublish = chosen !== null && (hasMedia || body.trim().length > 0);
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -241,57 +283,118 @@ export function NewPostForm({
       <input type="hidden" name="lng" value={chosen ? String(chosen.lng) : ""} />
       <input type="hidden" name="address" value={chosen?.address ?? ""} />
       <input type="hidden" name="importedPhotoId" value={imported?.photoId ?? ""} />
+      <input type="hidden" name="videoWidth" value={videoDims?.width ?? ""} />
+      <input type="hidden" name="videoHeight" value={videoDims?.height ?? ""} />
 
-      {/* 1. Foto (opcional) */}
+      {/* 1. Foto ou vídeo (opcional) */}
       <section className="flex flex-col gap-2">
-        {/* Um input só: "Tirar foto" liga o `capture` (abre a câmera no celular) e
-            "Da galeria" tira, pra o navegador oferecer os arquivos. */}
+        {/* `capture` abre a câmera no celular (foto ou vídeo); a galeria deixa o
+            navegador oferecer os arquivos, foto ou vídeo. */}
         <input
           ref={photoInputRef}
           type="file"
           name="photo"
           accept="image/*"
+          capture="environment"
           className="sr-only"
           aria-label="Foto do post"
-          onChange={handlePhotoChange}
+          onChange={handleFileChange}
+        />
+        <input
+          ref={videoInputRef}
+          type="file"
+          name="video"
+          accept="video/*"
+          capture="environment"
+          className="sr-only"
+          aria-label="Vídeo do post"
+          onChange={handleFileChange}
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          name="media"
+          accept="image/*,video/*"
+          className="sr-only"
+          aria-label="Foto ou vídeo da galeria"
+          onChange={handleFileChange}
         />
         {preview ? (
           <div className="border-border bg-muted relative overflow-hidden rounded-xl border">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={preview} alt="Prévia da foto" className="max-h-80 w-full object-contain" />
+            {preview.kind === "video" ? (
+              <video
+                src={preview.url}
+                poster={preview.poster ?? undefined}
+                controls
+                muted
+                playsInline
+                preload="metadata"
+                aria-label="Prévia do vídeo"
+                onLoadedMetadata={(event) => {
+                  const { videoWidth, videoHeight } = event.currentTarget;
+                  if (videoWidth > 0 && videoHeight > 0) {
+                    setVideoDims({ width: videoWidth, height: videoHeight });
+                  }
+                }}
+                className="max-h-80 w-full bg-black object-contain"
+              />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={preview.url}
+                alt="Prévia da foto"
+                className="max-h-80 w-full object-contain"
+              />
+            )}
             <Button
               type="button"
               variant="secondary"
               size="lg"
               className="absolute top-2 right-2 h-10"
-              onClick={clearPhoto}
+              onClick={clearMedia}
             >
               <X className="size-4" aria-hidden />
               Tirar
             </Button>
           </div>
         ) : (
-          <div className="flex gap-2">
+          <>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-12 flex-1 text-base"
+                onClick={() => photoInputRef.current?.click()}
+              >
+                📷 Tirar foto
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-12 flex-1 text-base"
+                onClick={() => videoInputRef.current?.click()}
+              >
+                🎬 Gravar vídeo
+              </Button>
+            </div>
             <Button
               type="button"
               variant="outline"
               size="lg"
-              className="h-12 flex-1 text-base"
-              onClick={() => openPhotoPicker("camera")}
+              className="h-12 w-full text-base"
+              onClick={() => galleryInputRef.current?.click()}
             >
-              📷 Tirar foto
+              🖼️ Da galeria (foto ou vídeo)
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="h-12 flex-1 text-base"
-              onClick={() => openPhotoPicker("gallery")}
-            >
-              🖼️ Da galeria
-            </Button>
-          </div>
+          </>
         )}
+        {mediaError ? (
+          <p role="alert" className="text-destructive text-xs">
+            {mediaError}
+          </p>
+        ) : null}
         {!preview ? (
           <Button
             type="button"
@@ -338,7 +441,8 @@ export function NewPostForm({
               </Button>
             </div>
             <p className="text-muted-foreground text-xs">
-              Vem a primeira foto e a legenda, pra você revisar. Reel e vídeo não entram.
+              Vem a primeira foto ou o vídeo (reel também) e a legenda, pra você revisar. Vídeo até
+              60 MB.
             </p>
             {igError ? (
               <p role="alert" className="text-destructive text-xs">
@@ -427,7 +531,7 @@ export function NewPostForm({
       </Button>
       {!canPublish ? (
         <p className="text-muted-foreground -mt-2 text-center text-xs">
-          Precisa de onde você tá e de uma foto ou um texto.
+          Precisa de onde você tá e de uma foto, um vídeo ou um texto.
         </p>
       ) : null}
     </form>

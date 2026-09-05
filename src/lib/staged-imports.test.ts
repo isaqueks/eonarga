@@ -18,6 +18,8 @@ function entry(id: string, userId = "user-ana") {
     userId,
     width: 800,
     height: 600,
+    videoExt: null,
+    posterId: null,
     sourceUrl: "https://www.instagram.com/p/x/",
     sourceAuthor: "nasa",
   };

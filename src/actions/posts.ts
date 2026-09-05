@@ -17,6 +17,14 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { isReactionEmoji } from "@/lib/reviews";
 import { discardStagedImport, takeStagedImport } from "@/lib/staged-imports";
 import { deleteImage, MAX_UPLOAD_BYTES, saveImage, sniffImageMime } from "@/lib/storage";
+import {
+  deleteVideo,
+  MAX_VIDEO_BYTES,
+  parseMp4Dimensions,
+  saveVideo,
+  sniffVideoExt,
+  type VideoExt,
+} from "@/lib/video-storage";
 
 /** Foto de post é pra ver no celular, igual à foto de lugar. */
 const PHOTO_MAX_SIZE = 1600;
@@ -26,11 +34,12 @@ const PHOTO_THUMB_SIZE = 400;
 const POST_RATE_LIMIT = { limit: 20, windowMs: 60 * 60 * 1000 };
 
 // Módulo "use server": só exporta função async, então as mensagens ficam privadas.
-const EMPTY_POST = "Manda uma foto ou escreve alguma coisa.";
+const EMPTY_POST = "Manda uma foto, um vídeo ou escreve alguma coisa.";
 const PLACE_NOT_FOUND = "Lugar não encontrado.";
 const PLACE_ARCHIVED = "Esse lugar está arquivado.";
 const TOO_BIG = "Foto grande demais (máximo 10 MB).";
-const NOT_AN_IMAGE = "Isso não é uma imagem que eu reconheça.";
+const VIDEO_TOO_BIG = "Vídeo grande demais (máximo 60 MB).";
+const NOT_AN_IMAGE = "Isso não é foto nem vídeo que eu reconheça.";
 // O sharp que vem pronto só decodifica HEIF em AV1; HEIC de iPhone (HEVC) fica de fora.
 const HEIC_NOT_SUPPORTED = "Não consegui abrir essa foto. Tenta mandar em JPEG ou PNG.";
 const TOO_MANY = "Calma, influencer.";
@@ -81,43 +90,80 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
   }
   const input = parsed.data;
 
-  const photo = formData.get("photo");
-  const hasPhoto = photo instanceof File && photo.size > 0;
-  // Foto importada do Instagram: já está no storage, "no palco" (docs/08 #37).
+  // Três inputs no formulário (câmera de foto, câmera de vídeo, galeria); vale o
+  // primeiro que veio com arquivo. Foto ou vídeo é decidido pelos magic bytes.
+  const upload = ["video", "photo", "media"]
+    .map((name) => formData.get(name))
+    .find((value): value is File => value instanceof File && value.size > 0);
+  const hasUpload = upload !== undefined;
+  // Mídia importada do Instagram: já está no storage, "no palco" (docs/08 #37).
   const importedPhotoId = field(formData, "importedPhotoId").trim();
-  if (hasPhoto && photo.size > MAX_UPLOAD_BYTES) {
-    return { ok: false, fieldErrors: { photo: TOO_BIG } };
+  if (hasUpload && upload.size > MAX_VIDEO_BYTES) {
+    return { ok: false, fieldErrors: { photo: VIDEO_TOO_BIG } };
   }
-  if (!hasPhoto && !importedPhotoId && !input.body) {
+  if (!hasUpload && !importedPhotoId && !input.body) {
     return { ok: false, fieldErrors: { body: EMPTY_POST } };
   }
+  // Proporção do vídeo dita pelo navegador (só pra layout; o MP4 manda quando dá pra ler).
+  const hintWidth = Number(field(formData, "videoWidth"));
+  const hintHeight = Number(field(formData, "videoHeight"));
+  const hint =
+    Number.isInteger(hintWidth) && Number.isInteger(hintHeight) && hintWidth > 0 && hintHeight > 0
+      ? { width: Math.min(hintWidth, 8192), height: Math.min(hintHeight, 8192) }
+      : null;
 
   if (!checkRateLimit(`post:${user.id}`, POST_RATE_LIMIT).ok) {
     return { ok: false, error: TOO_MANY };
   }
 
   let saved: { id: string; width: number; height: number } | null = null;
+  let video: { id: string; ext: VideoExt; width: number; height: number } | null = null;
   let source: { url: string; author: string | null } | null = null;
-  if (!hasPhoto && importedPhotoId) {
+  if (!hasUpload && importedPhotoId) {
     const staged = takeStagedImport(importedPhotoId, user.id);
     if (!staged) return { ok: false, fieldErrors: { photo: IMPORT_EXPIRED } };
-    saved = { id: staged.id, width: staged.width, height: staged.height };
+    if (staged.videoExt) {
+      video = { id: staged.id, ext: staged.videoExt, width: staged.width, height: staged.height };
+      // A capa do vídeo (quando veio) é a "foto" do post.
+      if (staged.posterId)
+        saved = { id: staged.posterId, width: staged.width, height: staged.height };
+    } else {
+      saved = { id: staged.id, width: staged.width, height: staged.height };
+    }
     source = { url: staged.sourceUrl, author: staged.sourceAuthor };
   }
-  if (hasPhoto) {
-    // Mandou foto própria por cima da importada: a importada vira lixo.
+  if (hasUpload) {
+    // Mandou arquivo próprio por cima do importado: o importado vira lixo.
     if (importedPhotoId) await discardStagedImport(importedPhotoId, user.id);
-    const buffer = Buffer.from(await photo.arrayBuffer());
+    // Foto grande demais nem é aberta; o tipo declarado só escolhe a mensagem, quem
+    // decide o que o arquivo é continua sendo o magic byte logo abaixo.
+    if (upload.type.startsWith("image/") && upload.size > MAX_UPLOAD_BYTES) {
+      return { ok: false, fieldErrors: { photo: TOO_BIG } };
+    }
+    const buffer = Buffer.from(await upload.arrayBuffer());
 
     // O `Content-Type` do upload é chute do cliente: quem manda é o magic byte (docs/05).
-    const mime = sniffImageMime(buffer);
-    if (!mime) return { ok: false, fieldErrors: { photo: NOT_AN_IMAGE } };
+    const videoExt = sniffVideoExt(buffer);
+    if (videoExt) {
+      try {
+        const stored = await saveVideo(buffer, videoExt);
+        const dims = parseMp4Dimensions(buffer) ?? hint ?? { width: 0, height: 0 };
+        video = { id: stored.id, ext: stored.ext, ...dims };
+      } catch {
+        return { ok: false, error: SAVE_FAILED };
+      }
+    } else {
+      const mime = sniffImageMime(buffer);
+      if (!mime) return { ok: false, fieldErrors: { photo: NOT_AN_IMAGE } };
+      if (buffer.byteLength > MAX_UPLOAD_BYTES)
+        return { ok: false, fieldErrors: { photo: TOO_BIG } };
 
-    try {
-      saved = await saveImage(buffer, { maxSize: PHOTO_MAX_SIZE, thumbSize: PHOTO_THUMB_SIZE });
-    } catch {
-      const heic = mime === "image/heic" || mime === "image/heif";
-      return { ok: false, fieldErrors: { photo: heic ? HEIC_NOT_SUPPORTED : NOT_AN_IMAGE } };
+      try {
+        saved = await saveImage(buffer, { maxSize: PHOTO_MAX_SIZE, thumbSize: PHOTO_THUMB_SIZE });
+      } catch {
+        const heic = mime === "image/heic" || mime === "image/heif";
+        return { ok: false, fieldErrors: { photo: heic ? HEIC_NOT_SUPPORTED : NOT_AN_IMAGE } };
+      }
     }
   }
 
@@ -129,6 +175,10 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
       photoId: saved?.id ?? null,
       photoWidth: saved?.width ?? null,
       photoHeight: saved?.height ?? null,
+      videoId: video?.id ?? null,
+      videoExt: video?.ext ?? null,
+      videoWidth: video?.width ?? null,
+      videoHeight: video?.height ?? null,
       placeId: place?.id ?? null,
       lat: input.lat,
       lng: input.lng,
@@ -137,8 +187,9 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
       sourceAuthor: source?.author ?? null,
     });
   } catch {
-    // Sem linha no banco a foto é lixo: apaga os arquivos em vez de deixar órfão.
+    // Sem linha no banco a mídia é lixo: apaga os arquivos em vez de deixar órfão.
     if (saved) await deleteImage(saved.id);
+    if (video) await deleteVideo(video.id);
     return { ok: false, error: SAVE_FAILED };
   }
 
@@ -146,7 +197,7 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
   redirect("/feed");
 }
 
-/** Apaga o post e a foto dele. Só quem postou, ou admin. */
+/** Apaga o post e a foto/vídeo dele. Só quem postou, ou admin. */
 export async function deletePost(postId: string): Promise<FormState> {
   const { user } = await assertUser();
   if (typeof postId !== "string" || postId === "") {
@@ -154,7 +205,7 @@ export async function deletePost(postId: string): Promise<FormState> {
   }
 
   const rows = await db
-    .select({ id: posts.id, userId: posts.userId, photoId: posts.photoId })
+    .select({ id: posts.id, userId: posts.userId, photoId: posts.photoId, videoId: posts.videoId })
     .from(posts)
     .where(eq(posts.id, postId))
     .limit(1);
@@ -166,8 +217,9 @@ export async function deletePost(postId: string): Promise<FormState> {
   }
 
   await db.delete(posts).where(eq(posts.id, post.id));
-  // Só depois de a linha sumir é que o arquivo vira lixo.
+  // Só depois de a linha sumir é que os arquivos viram lixo.
   if (post.photoId) await deleteImage(post.photoId);
+  if (post.videoId) await deleteVideo(post.videoId);
 
   revalidatePath("/feed");
   return { ok: true };

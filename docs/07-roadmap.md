@@ -139,6 +139,8 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Feed vira a página inicial: ranking em `/ranking`, `/` redireciona, pós-login e `start_url` do PWA apontam pro feed
 - [x] Importar post do Instagram (migration 0008): `lib/instagram.ts` puro com teste, `importInstagramPost` com fetch limitado e allowlist da CDN, foto "no palco" (`lib/staged-imports.ts`), `createPost` aceita `importedPhotoId`, origem no card, `share_target` no manifest e `?text=` no `/feed/novo`
 - [ ] Testar o "Compartilhar" do Instagram num Android de verdade com o PWA instalado
+- [x] Vídeo em post (migration 0009): `lib/video-storage.ts` (sniff, dimensões do MP4, stream com teto), rota `/api/videos` com Range, formulário com câmera de vídeo e galeria foto/vídeo, card com player; reel/vídeo do Instagram importado com capa
+- [ ] Testar vídeo de iPhone (HEVC) e, se não tocar em Android, avaliar ffmpeg fora da VPS
 
 ## Definição de pronto (qualquer tarefa)
 

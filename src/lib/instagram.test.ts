@@ -5,7 +5,7 @@ import {
   decodeHtmlEntities,
   embedUrlFor,
   extractInstagramLink,
-  isInstagramImageUrl,
+  isInstagramMediaUrl,
   parseInstagramEmbed,
 } from "./instagram";
 
@@ -18,12 +18,14 @@ const SINGLE = `
 <div class="Caption"><a class="CaptionUsername" href="https://www.instagram.com/nasa/" target="_blank">nasa</a><br /><br />Crew aboard the <a href="/ISS/">&#064;ISS</a> captured this photo of Galveston, Texas.<br />&#xa0;<br />Read more &amp; enjoy &lt;3<div class="CaptionComments">View all 12 comments</div></div>
 </body></html>`;
 
+const CDN = "https://scontent.cdninstagram.com";
+
 /** O contextJSON vem como string JSON escapada dentro do JSON da página. */
 function withContext(media: Record<string, unknown>, extraHtml = ""): string {
   const context = JSON.stringify({ gql_data: { shortcode_media: media } });
   const escaped = JSON.stringify(context); // já vem com as aspas de fora
   return `<html><body><script>{"contextJSON":${escaped}}</script>
-<img class="EmbeddedMediaImage" alt="Instagram post shared by &#064;fulano" src="https://scontent.cdninstagram.com/poster.jpg" />
+<img class="EmbeddedMediaImage" alt="Instagram post shared by &#064;fulano" src="${CDN}/poster.jpg" />
 <div class="Caption"><a class="CaptionUsername">fulano</a><br /><br />legenda do html<div class="CaptionComments"></div></div>
 ${extraHtml}</body></html>`;
 }
@@ -64,14 +66,17 @@ describe("extractInstagramLink", () => {
   });
 });
 
-describe("isInstagramImageUrl", () => {
+describe("isInstagramMediaUrl", () => {
   it("aceita só https na CDN do Instagram/Facebook", () => {
-    expect(isInstagramImageUrl("https://instagram.fnvt11-1.fna.fbcdn.net/v/t51/x.jpg")).toBe(true);
-    expect(isInstagramImageUrl("https://scontent.cdninstagram.com/v/x.jpg")).toBe(true);
-    expect(isInstagramImageUrl("http://scontent.cdninstagram.com/v/x.jpg")).toBe(false);
-    expect(isInstagramImageUrl("https://fbcdn.net.evil.com/x.jpg")).toBe(false);
-    expect(isInstagramImageUrl("https://127.0.0.1/x.jpg")).toBe(false);
-    expect(isInstagramImageUrl("nem url")).toBe(false);
+    expect(isInstagramMediaUrl("https://instagram.fnvt11-1.fna.fbcdn.net/v/t51/x.jpg")).toBe(true);
+    expect(isInstagramMediaUrl(`${CDN}/v/x.jpg`)).toBe(true);
+    expect(isInstagramMediaUrl("https://instagram.fnvt11-1.fna.fbcdn.net/o1/v/t2/f2/m86/x.mp4")).toBe(
+      true,
+    );
+    expect(isInstagramMediaUrl("http://scontent.cdninstagram.com/v/x.jpg")).toBe(false);
+    expect(isInstagramMediaUrl("https://fbcdn.net.evil.com/x.jpg")).toBe(false);
+    expect(isInstagramMediaUrl("https://127.0.0.1/x.jpg")).toBe(false);
+    expect(isInstagramMediaUrl("nem url")).toBe(false);
   });
 });
 
@@ -86,11 +91,13 @@ describe("decodeHtmlEntities", () => {
 
 describe("parseInstagramEmbed", () => {
   it("foto única: imagem, legenda sem o nome do perfil e o perfil à parte", () => {
-    const parsed = parseInstagramEmbed(SINGLE);
-    expect(parsed).toEqual({
+    expect(parseInstagramEmbed(SINGLE)).toEqual({
       ok: true,
-      imageUrl:
-        "https://instagram.fnvt11-1.fna.fbcdn.net/v/t51.82787-15/6259_n.jpg?stp=dst-jpg_e35&_nc_cat=105",
+      media: {
+        kind: "photo",
+        imageUrl:
+          "https://instagram.fnvt11-1.fna.fbcdn.net/v/t51.82787-15/6259_n.jpg?stp=dst-jpg_e35&_nc_cat=105",
+      },
       caption:
         "Crew aboard the @ISS captured this photo of Galveston, Texas.\n\nRead more & enjoy <3",
       username: "nasa",
@@ -98,53 +105,98 @@ describe("parseInstagramEmbed", () => {
     });
   });
 
-  it("carrossel: pega o primeiro slide que não é vídeo e a legenda do JSON", () => {
+  it("carrossel: leva o primeiro slide (foto) e a legenda do JSON", () => {
     const html = withContext({
       __typename: "GraphSidecar",
       is_video: false,
-      display_url: "https://scontent.cdninstagram.com/capa.jpg",
+      display_url: `${CDN}/capa.jpg`,
       owner: { username: "meganoticiascl" },
       edge_media_to_caption: { edges: [{ node: { text: "¡Totalmente imponente! 🤯" } }] },
       edge_sidecar_to_children: {
         edges: [
-          { node: { is_video: true, display_url: "https://scontent.cdninstagram.com/v1.jpg" } },
-          { node: { is_video: false, display_url: "https://scontent.cdninstagram.com/s2.jpg" } },
-          { node: { is_video: false, display_url: "https://scontent.cdninstagram.com/s3.jpg" } },
+          { node: { is_video: false, display_url: `${CDN}/s1.jpg` } },
+          { node: { is_video: true, display_url: `${CDN}/v2.jpg`, video_url: `${CDN}/v2.mp4` } },
         ],
       },
     });
 
     expect(parseInstagramEmbed(html)).toEqual({
       ok: true,
-      imageUrl: "https://scontent.cdninstagram.com/s2.jpg",
+      media: { kind: "photo", imageUrl: `${CDN}/s1.jpg` },
       caption: "¡Totalmente imponente! 🤯",
       username: "meganoticiascl",
-      slides: 3,
+      slides: 2,
     });
   });
 
-  it("carrossel só de vídeo é recusado", () => {
+  it("carrossel com vídeo no primeiro slide leva o vídeo, com capa e dimensões", () => {
     const html = withContext({
       __typename: "GraphSidecar",
       edge_sidecar_to_children: {
         edges: [
-          { node: { is_video: true, display_url: "https://scontent.cdninstagram.com/v.jpg" } },
+          {
+            node: {
+              is_video: true,
+              display_url: `${CDN}/v1.jpg`,
+              video_url: `${CDN}/v1.mp4`,
+              dimensions: { width: 640, height: 800 },
+            },
+          },
+          { node: { is_video: false, display_url: `${CDN}/s2.jpg` } },
         ],
       },
     });
-    expect(parseInstagramEmbed(html)).toEqual({ ok: false, reason: "video" });
+
+    expect(parseInstagramEmbed(html)).toMatchObject({
+      ok: true,
+      media: {
+        kind: "video",
+        videoUrl: `${CDN}/v1.mp4`,
+        posterUrl: `${CDN}/v1.jpg`,
+        width: 640,
+        height: 800,
+        durationSec: null,
+      },
+      slides: 2,
+    });
   });
 
-  it("reel/vídeo é recusado mesmo tendo imagem de capa no HTML", () => {
+  it("reel: vídeo com URL, capa, dimensões e duração do JSON", () => {
     const html = withContext({
       __typename: "GraphVideo",
       is_video: true,
-      display_url: "https://scontent.cdninstagram.com/capa.jpg",
+      display_url: `${CDN}/capa.jpg`,
+      video_url: `${CDN}/reel.mp4`,
+      dimensions: { width: 1080, height: 1920 },
+      video_duration: 166.81,
+      owner: { username: "nasainternships" },
+    });
+
+    expect(parseInstagramEmbed(html)).toMatchObject({
+      ok: true,
+      media: {
+        kind: "video",
+        videoUrl: `${CDN}/reel.mp4`,
+        posterUrl: `${CDN}/capa.jpg`,
+        width: 1080,
+        height: 1920,
+        durationSec: 166.81,
+      },
+      username: "nasainternships",
+      slides: 1,
+    });
+  });
+
+  it("vídeo sem URL no JSON é recusado como `video`", () => {
+    const html = withContext({
+      __typename: "GraphVideo",
+      is_video: true,
+      display_url: `${CDN}/capa.jpg`,
     });
     expect(parseInstagramEmbed(html)).toEqual({ ok: false, reason: "video" });
   });
 
-  it("sem JSON e com botão de play também é vídeo", () => {
+  it("sem JSON e com botão de play é vídeo sem URL", () => {
     const html = SINGLE.replace(
       '<div class="Caption">',
       '<div class="EmbedPlayButton"></div><div class="Caption">',
@@ -152,7 +204,7 @@ describe("parseInstagramEmbed", () => {
     expect(parseInstagramEmbed(html)).toEqual({ ok: false, reason: "video" });
   });
 
-  it("página sem imagem (post privado, apagado ou HTML novo) é not-found", () => {
+  it("página sem mídia (post privado, apagado ou HTML novo) é not-found", () => {
     expect(parseInstagramEmbed("<html><body>Instagram</body></html>")).toEqual({
       ok: false,
       reason: "not-found",
@@ -164,10 +216,10 @@ describe("parseInstagramEmbed", () => {
   });
 
   it("post sem legenda devolve null, e o perfil vem do alt da imagem se não houver link", () => {
-    const html = `<img class="EmbeddedMediaImage" alt="Instagram post shared by &#064;zeca" src="https://scontent.cdninstagram.com/x.jpg" />`;
+    const html = `<img class="EmbeddedMediaImage" alt="Instagram post shared by &#064;zeca" src="${CDN}/x.jpg" />`;
     expect(parseInstagramEmbed(html)).toEqual({
       ok: true,
-      imageUrl: "https://scontent.cdninstagram.com/x.jpg",
+      media: { kind: "photo", imageUrl: `${CDN}/x.jpg` },
       caption: null,
       username: "zeca",
       slides: 1,

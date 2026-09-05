@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { categories, places, postComments, postReactions, posts, users } from "@/lib/db/schema";
 import type { PersonRef } from "@/lib/queries/places";
 import type { ReactionSummary } from "@/lib/queries/reviews";
+import { isVideoExt, type VideoExt } from "@/lib/video-storage";
 
 export interface PostPhoto {
   id: string;
@@ -12,6 +13,16 @@ export interface PostPhoto {
   url: string;
   /** Quadrada, 400 px. */
   thumbUrl: string;
+  width: number;
+  height: number;
+}
+
+/** O vídeo do post; com vídeo, `photo` (se houver) é a capa. */
+export interface PostVideo {
+  id: string;
+  /** `/api/videos/<id>.<ext>`, com Range. */
+  url: string;
+  ext: VideoExt;
   width: number;
   height: number;
 }
@@ -39,6 +50,7 @@ export interface PostItem {
   id: string;
   body: string | null;
   photo: PostPhoto | null;
+  video: PostVideo | null;
   place: PostPlaceRef | null;
   lat: number;
   lng: number;
@@ -82,6 +94,10 @@ const columns = {
   photoId: posts.photoId,
   photoWidth: posts.photoWidth,
   photoHeight: posts.photoHeight,
+  videoId: posts.videoId,
+  videoExt: posts.videoExt,
+  videoWidth: posts.videoWidth,
+  videoHeight: posts.videoHeight,
   lat: posts.lat,
   lng: posts.lng,
   address: posts.address,
@@ -103,6 +119,10 @@ type PostRow = {
   photoId: string | null;
   photoWidth: number | null;
   photoHeight: number | null;
+  videoId: string | null;
+  videoExt: string | null;
+  videoWidth: number | null;
+  videoHeight: number | null;
   lat: number;
   lng: number;
   address: string | null;
@@ -223,6 +243,16 @@ function toItem(
           height: row.photoHeight ?? 0,
         }
       : null,
+    video:
+      row.videoId && row.videoExt && isVideoExt(row.videoExt)
+        ? {
+            id: row.videoId,
+            url: `/api/videos/${row.videoId}.${row.videoExt}`,
+            ext: row.videoExt,
+            width: row.videoWidth ?? 0,
+            height: row.videoHeight ?? 0,
+          }
+        : null,
     place:
       row.placeId && row.placeSlug && row.placeName
         ? {

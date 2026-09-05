@@ -84,3 +84,9 @@ Checagem sempre no servidor, dentro da server action, via `requireUser()` / `req
 - A imagem é reprocessada pelo sharp como qualquer upload (webp, sem EXIF, magic bytes conferidos).
 - Foto importada fica "no palco" em memória por 30 min, só pra quem importou; o que vence tem os arquivos apagados. 10 importações por 10 min por pessoa.
 - User-agent honesto (`EONargaBot/1.0`): o Instagram entrega HTML renderizado pra quem não é navegador. Se mudarem isso, a importação quebra e o caminho manual continua.
+
+## Vídeo em post (docs/08 #39)
+
+- Tipo pelos magic bytes (`ftyp` com marca conhecida = MP4/MOV; EBML com doctype `webm`), nunca pelo `Content-Type`. Matroska, HEIC e o resto caem fora.
+- Guardado como veio, sem transcodificar (não tem ffmpeg na imagem; a VPS não aguentaria). 60 MB no máximo; o formulário confere antes de subir e a action confere de novo. `bodySizeLimit` das server actions em 64 MB.
+- Servido só com sessão por `/api/videos/<id>.<ext>`, com Range (206) e `nosniff`. Reel importado chega em stream direto pro disco, com teto; passou, apaga o parcial.
