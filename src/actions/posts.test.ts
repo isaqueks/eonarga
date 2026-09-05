@@ -769,3 +769,82 @@ describe("createPost com vídeo", () => {
     });
   });
 });
+
+describe("menções (@Nome:)", () => {
+  /** Payloads (JSON) que o web-push recebeu, por endpoint. */
+  function pushes(): { endpoint: string; body: string }[] {
+    return webpush.sendNotification.mock.calls.map((call) => ({
+      endpoint: (call[0] as { endpoint: string }).endpoint,
+      body: (JSON.parse(call[1] as string) as { body: string }).body,
+    }));
+  }
+
+  it("post que cita alguém manda push só pra quem foi citado, com registro no histórico", async () => {
+    await subscribe("ana-celular", ANA.id);
+    await subscribe("bia-celular", BIA.id);
+    await subscribe("cadu-celular", ADMIN.id);
+
+    await expectRedirect({ ...AQUI, body: "@Bia: bora hoje? @Ana: eu mesmo" });
+
+    // A Bia foi citada; a Ana citou a si mesma e não apita; o Cadu não foi citado.
+    expect(pushes()).toEqual([
+      {
+        endpoint: "https://push.example.com/bia-celular",
+        body: "Ana te mencionou num post: “@Bia: bora hoje? @Ana: eu mesmo”",
+      },
+    ]);
+    const log = await db.select().from(schema.notifications);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({
+      kind: "mention",
+      createdBy: ANA.id,
+      targetUserId: BIA.id,
+      sentCount: 1,
+    });
+    expect(log[0].url).toMatch(/^\/feed#post-/);
+  });
+
+  it("nome sem acento e sem caixa acha a pessoa; nome inventado é ignorado", async () => {
+    await db
+      .insert(schema.users)
+      .values({ id: "user-joao", name: "João", email: "joao@example.com", passwordHash: "x" })
+      .onConflictDoNothing();
+    await subscribe("joao-celular", "user-joao");
+
+    await expectRedirect({ ...AQUI, body: "@joao: cola aí @Ninguem: oi" });
+
+    expect(pushes().map((p) => p.endpoint)).toEqual(["https://push.example.com/joao-celular"]);
+  });
+
+  it("comentário que cita alguém apita pro citado, mas o dono do post só leva o push de comentário", async () => {
+    const id = await seedTextPost(); // post da Ana
+    await subscribe("ana-celular", ANA.id);
+    await subscribe("cadu-celular", ADMIN.id);
+
+    state.user = BIA;
+    expect(
+      await actions.addPostComment(empty, form({ postId: id, body: "@Ana: viu? @Cadu: vem" })),
+    ).toEqual({
+      ok: true,
+    });
+
+    const got = pushes();
+    // Ana: um push só (o de comentário). Cadu: o de menção.
+    expect(got.filter((p) => p.endpoint.endsWith("ana-celular")).map((p) => p.body)).toEqual([
+      "Bia comentou no seu post: “@Ana: viu? @Cadu: vem”",
+    ]);
+    expect(got.filter((p) => p.endpoint.endsWith("cadu-celular")).map((p) => p.body)).toEqual([
+      "Bia te mencionou num comentário: “@Ana: viu? @Cadu: vem”",
+    ]);
+    const kinds = (await db.select().from(schema.notifications)).map((n) => n.kind).sort();
+    expect(kinds).toEqual(["comment", "mention"]);
+  });
+
+  it("sem push configurado, menção não faz nada e o post entra igual", async () => {
+    await subscribe("bia-celular", BIA.id);
+    delete process.env.VAPID_PRIVATE_KEY;
+    await expectRedirect({ ...AQUI, body: "@Bia: oi" });
+    expect(pushes()).toEqual([]);
+    expect(await db.select().from(schema.notifications)).toHaveLength(0);
+  });
+});

@@ -11,6 +11,7 @@ import { assertUser } from "@/lib/auth/guards";
 import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
 import { notifications, places, postComments, postReactions, posts } from "@/lib/db/schema";
+import { notifyMentions } from "@/lib/notify-mentions";
 import { commentNotificationBody, postInputSchema } from "@/lib/posts";
 import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -167,9 +168,10 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
     }
   }
 
+  const postId = nanoid(12);
   try {
     await db.insert(posts).values({
-      id: nanoid(12),
+      id: postId,
       userId: user.id,
       body: input.body,
       photoId: saved?.id ?? null,
@@ -191,6 +193,17 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
     if (saved) await deleteImage(saved.id);
     if (video) await deleteVideo(video.id);
     return { ok: false, error: SAVE_FAILED };
+  }
+
+  // Quem foi citado no texto leva um push (o autor nunca se cita).
+  if (input.body) {
+    await notifyMentions({
+      text: input.body,
+      author: { id: user.id, name: user.name },
+      where: "post",
+      url: `/feed#post-${postId}`,
+      placeId: place?.id ?? null,
+    });
   }
 
   revalidatePath("/feed");
@@ -348,6 +361,15 @@ export async function addPostComment(_prev: FormState, formData: FormData): Prom
       // Sem aviso desta vez; o comentário continua no feed.
     }
   }
+  // Menções no comentário: quem foi citado leva push, menos o dono do post (que já levou).
+  await notifyMentions({
+    text: data.body,
+    author: { id: user.id, name: user.name },
+    where: "comment",
+    url: `/feed#post-${post.id}`,
+    exclude: post.userId !== user.id ? [post.userId] : [],
+    placeId: post.placeId,
+  });
 
   revalidatePath("/feed");
   return { ok: true };

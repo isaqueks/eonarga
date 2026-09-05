@@ -68,7 +68,9 @@ export default async function AdminNotificarPage() {
                       ? "chamada"
                       : item.kind === "comment"
                         ? "comentário"
-                        : "aviso"}
+                        : item.kind === "mention"
+                          ? "menção"
+                          : "aviso"}
                   </span>
                   <span className="text-sm font-medium">{item.title}</span>
                 </div>

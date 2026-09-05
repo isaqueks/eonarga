@@ -518,6 +518,27 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   });
   await shot(page, "20b-post-reacao-e-comentario");
 
+  // "Responder" no comentário abre a caixa já com "@Admin: "; e digitar "@Adm" sugere
+  // o Admin, que ao ser escolhido vira a menção fechada.
+  const responder = cardTexto.getByRole("button", { name: "Responder a Admin" }).first();
+  const caixa = cardTexto.getByLabel("Seu comentário");
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await responder.click();
+    try {
+      await expect(caixa).toHaveValue("@Admin: ", { timeout: 3_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  await expect(caixa).toHaveValue("@Admin: ");
+  await caixa.fill("@Admin: bora e @Adm");
+  const sugestao = page.getByRole("option", { name: "Admin" });
+  await expect(sugestao).toBeVisible({ timeout: 10_000 });
+  await sugestao.click();
+  await expect(caixa).toHaveValue("@Admin: bora e @Admin: ");
+  await cardTexto.getByRole("button", { name: "Cancelar" }).click();
+
   // A reação vira linha nas novidades e tudo sobrevive a um reload.
   await page.reload();
   await expect(cardTexto.getByRole("button", { name: "Reagir com 🔥 (1)" })).toHaveAttribute(

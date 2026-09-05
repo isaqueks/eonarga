@@ -1,15 +1,20 @@
 "use client";
 
-import { MessageCircle, Trash2 } from "lucide-react";
+import { MessageCircle, Reply, Trash2 } from "lucide-react";
 import { useActionState, useOptimistic, useRef, useState, useTransition } from "react";
 
 import { addComment, deleteComment } from "@/actions/comments";
 import { EMPTY_FORM_STATE } from "@/actions/form-state";
 import { addPostComment, deletePostComment } from "@/actions/posts";
+import { MentionText } from "@/components/mentions/mention-text";
+import {
+  MentionTextarea,
+  type MentionTextareaHandle,
+} from "@/components/mentions/mention-textarea";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/user-avatar";
 import { COMMENT_MAX } from "@/lib/constants";
+import { mentionToken } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -91,7 +96,7 @@ export function CommentThread({
   const [draft, setDraft] = useState("");
   const [removing, startRemoving] = useTransition();
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<MentionTextareaHandle>(null);
 
   const hidden = expanded ? 0 : Math.max(0, optimistic.length - PREVIEW);
   const visible = hidden > 0 ? optimistic.slice(-PREVIEW) : optimistic;
@@ -100,6 +105,17 @@ export function CommentThread({
     setOpen(true);
     // O `requestAnimationFrame` espera o textarea existir pra dar foco nele.
     requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  /** "Responder": abre o formulário com `@Nome: ` no começo do texto. */
+  function replyTo(authorName: string) {
+    if (!open) {
+      const token = mentionToken(authorName);
+      setDraft((current) => (current.startsWith(token) ? current : token + current));
+      openForm();
+      return;
+    }
+    textareaRef.current?.prependMention(authorName);
   }
 
   function remove(id: string) {
@@ -139,9 +155,20 @@ export function CommentThread({
                     {comment.when ? <span>{comment.when}</span> : null}
                   </p>
                   <p className="text-[0.9375rem] leading-snug break-words whitespace-pre-wrap">
-                    {comment.body}
+                    <MentionText text={comment.body} />
                   </p>
                 </div>
+                {canReply && !pending ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-lg"
+                    className="text-muted-foreground hover:text-foreground size-9 shrink-0"
+                    onClick={() => replyTo(comment.authorName)}
+                    aria-label={`Responder a ${comment.authorName}`}
+                  >
+                    <Reply className="size-4" aria-hidden />
+                  </Button>
+                ) : null}
                 {comment.canDelete ? (
                   <Button
                     variant="ghost"
@@ -178,13 +205,13 @@ export function CommentThread({
           className="flex flex-col gap-1.5"
         >
           <input type="hidden" name={copy.field} value={target.id} />
-          <Textarea
-            ref={textareaRef}
+          <MentionTextarea
+            handleRef={textareaRef}
             name="body"
             rows={2}
             maxLength={COMMENT_MAX}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onValueChange={setDraft}
             placeholder={copy.placeholder}
             aria-label={copy.label}
             aria-invalid={state.fieldErrors?.body ? true : undefined}

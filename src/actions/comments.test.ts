@@ -25,8 +25,15 @@ const REVIEW_ID = "rev-ana";
 const ARCHIVED_REVIEW_ID = "rev-morto";
 
 const state = vi.hoisted(() => ({
-  user: null as { id: string; role: "admin" | "member" } | null,
+  user: null as { id: string; name?: string; role: "admin" | "member" } | null,
 }));
+
+// Menção numa resposta vira push: o web-push vira um espião aqui.
+const webpush = vi.hoisted(() => ({
+  sendNotification: vi.fn(),
+  setVapidDetails: vi.fn(),
+}));
+vi.mock("web-push", () => ({ default: webpush }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
 
@@ -320,5 +327,45 @@ describe("listCommentsForReviews", () => {
     expect(lista[0].comments.map((c) => c.body)).toEqual(["resposta na ficha"]);
     // `listMyReviews` não carrega a thread de propósito.
     expect((await reviewQueries.listMyReviews(PLACE_ID, ANA.id))[0]?.comments).toEqual([]);
+  });
+});
+
+describe("menção numa resposta", () => {
+  it("cita alguém e a pessoa leva push apontando pra ficha", async () => {
+    Object.assign(process.env, {
+      VAPID_PUBLIC_KEY: "chave-publica",
+      VAPID_PRIVATE_KEY: "chave-privada",
+      VAPID_SUBJECT: "https://eonarga.com.br",
+    });
+    webpush.sendNotification.mockReset();
+    webpush.sendNotification.mockResolvedValue({ statusCode: 201 });
+    await db.delete(schema.notifications);
+    await db.insert(schema.pushSubscriptions).values({
+      id: "sub-bia",
+      userId: BIA.id,
+      endpoint: "https://push.example.com/bia-celular",
+      p256dh: "p",
+      auth: "a",
+    });
+
+    state.user = { ...ANA, name: "Ana" };
+    expect(
+      await actions.addComment(empty, form({ reviewId: REVIEW_ID, body: "@Bia: concorda?" })),
+    ).toEqual({ ok: true });
+
+    expect(webpush.sendNotification).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(webpush.sendNotification.mock.calls[0][1] as string) as {
+      body: string;
+      url: string;
+    };
+    expect(payload.body).toBe("Ana te mencionou num comentário: “@Bia: concorda?”");
+    expect(payload.url).toBe(`/lugares/${PLACE_SLUG}#avaliacoes`);
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      kind: "mention",
+      targetUserId: BIA.id,
+    });
+
+    delete process.env.VAPID_PRIVATE_KEY;
+    await db.delete(schema.pushSubscriptions);
   });
 });

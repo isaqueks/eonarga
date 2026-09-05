@@ -228,7 +228,8 @@ export const pushSubscriptions = sqliteTable(
 );
 
 // "comment" = alguém comentou no seu post (docs/08 #34); vai só pra quem postou.
-export const NOTIFICATION_KINDS = ["call", "admin", "comment"] as const;
+// "mention" = alguém te citou com @Nome: (docs/08 #41); vai só pra quem foi citado.
+export const NOTIFICATION_KINDS = ["call", "admin", "comment", "mention"] as const;
 
 // Histórico do que foi disparado: "Chamar galera pra cá", avisos do admin e comentários em post.
 export const notifications = sqliteTable(

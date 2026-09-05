@@ -10,6 +10,7 @@ import { assertUser } from "@/lib/auth/guards";
 import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
 import { places, reviewComments, reviews } from "@/lib/db/schema";
+import { notifyMentions } from "@/lib/notify-mentions";
 
 // Módulo "use server": só pode exportar função async, então as mensagens ficam privadas.
 const BODY_ERROR = `Escreve alguma coisa (até ${COMMENT_MAX} caracteres).`;
@@ -29,6 +30,7 @@ async function findReviewWithPlace(reviewId: string) {
     .select({
       id: reviews.id,
       userId: reviews.userId,
+      placeId: places.id,
       slug: places.slug,
       placeStatus: places.status,
     })
@@ -59,6 +61,15 @@ export async function addComment(_prev: FormState, formData: FormData): Promise<
     reviewId: review.id,
     userId: user.id,
     body: data.body,
+  });
+
+  // Quem foi citado na resposta leva um push apontando pra ficha.
+  await notifyMentions({
+    text: data.body,
+    author: { id: user.id, name: user.name },
+    where: "comment",
+    url: `/lugares/${review.slug}#avaliacoes`,
+    placeId: review.placeId,
   });
 
   revalidatePath(`/lugares/${review.slug}`);

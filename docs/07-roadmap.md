@@ -142,6 +142,7 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Vídeo em post (migration 0009): `lib/video-storage.ts` (sniff, dimensões do MP4, stream com teto), rota `/api/videos` com Range, formulário com câmera de vídeo e galeria foto/vídeo, card com player; reel/vídeo do Instagram importado com capa
 - [ ] Testar vídeo de iPhone (HEVC) e, se não tocar em Android, avaliar ffmpeg fora da VPS
 - [x] Um vídeo por vez no feed: dar play pausa os outros (`onPlay` no player), com e2e
+- [x] Menções `@Nome:` (`lib/mentions.ts` puro com teste; `notify-mentions.ts` com push e histórico kind `mention`; `/api/mentions` pro autocomplete; `MentionTextarea` no post e nos comentários; "Responder" pré-preenche; menções em destaque no texto), com testes das actions e e2e
 
 ## Definição de pronto (qualquer tarefa)
 

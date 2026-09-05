@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { CommentThread, type CommentView } from "@/components/comments/comment-thread";
+import { MentionText } from "@/components/mentions/mention-text";
 import { mapsSearchUrl } from "@/components/places/maps-buttons";
 import { ReactionBar } from "@/components/reviews/reaction-bar";
 import { UserAvatar } from "@/components/user-avatar";
@@ -84,7 +85,9 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
       ) : null}
 
       {post.body ? (
-        <p className="text-[0.9375rem] leading-snug whitespace-pre-line">{post.body}</p>
+        <p className="text-[0.9375rem] leading-snug whitespace-pre-line">
+          <MentionText text={post.body} />
+        </p>
       ) : null}
 
       <ReactionBar

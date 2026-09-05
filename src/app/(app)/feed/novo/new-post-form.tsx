@@ -17,7 +17,7 @@ import { createPost } from "@/actions/posts";
 import { LocationPickerLazy } from "@/components/map/location-picker-lazy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { MentionTextarea } from "@/components/mentions/mention-textarea";
 import { extractInstagramLink } from "@/lib/instagram";
 import { formatLatLng, haversineMeters, nearestPlace, POST_BODY_MAX } from "@/lib/posts";
 import { PHOTO_MAX_BYTES, VIDEO_MAX_BYTES } from "@/lib/constants";
@@ -460,10 +460,10 @@ export function NewPostForm({
 
       {/* 2. Texto (opcional) */}
       <section className="flex flex-col gap-1">
-        <Textarea
+        <MentionTextarea
           name="body"
           value={body}
-          onChange={(event) => setBody(event.target.value)}
+          onValueChange={setBody}
           placeholder="O que tá rolando?"
           maxLength={POST_BODY_MAX}
           rows={3}
