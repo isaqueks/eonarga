@@ -71,6 +71,13 @@
       "when": 1788565449376,
       "tag": "0009_videos-em-posts",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788635297787,
+      "tag": "0010_curtidas-em-comentarios",
+      "breakpoints": true
     }
   ]
 }

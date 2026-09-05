@@ -23,6 +23,10 @@ erDiagram
   posts ||--o{ post_reactions : recebe
   users ||--o{ post_comments : comenta
   posts ||--o{ post_comments : tem
+  users ||--o{ review_comment_likes : curte
+  review_comments ||--o{ review_comment_likes : recebe
+  users ||--o{ post_comment_likes : curte
+  post_comments ||--o{ post_comment_likes : recebe
 ```
 
 ## Tabelas
@@ -162,6 +166,10 @@ O mesmo desenho de `review_reactions` / `review_comments`, apontando pra `posts`
 - `post_comments`: `id` (`nanoid(12)`), `post_id`, `user_id`, `body` (texto puro, até 500), `created_at`, `updated_at`; índice em `post_id`. Cascade no post e na pessoa.
 
 Quem apaga um comentário: quem escreveu, quem postou ou admin (resolvido na query, com o `user_id` do post junto).
+
+### review_comment_likes e post_comment_likes
+
+Curtida em comentário (migration 0010): só "curtir", sem emoji. PK `(comment_id, user_id)`, `created_at`; cascade no comentário e na pessoa. A contagem e o "eu curti" saem numa query agrupada junto com a lista de comentários (`src/lib/queries/comment-likes.ts`), nunca por comentário.
 
 ## Ranking
 

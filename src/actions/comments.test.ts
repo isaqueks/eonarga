@@ -376,3 +376,55 @@ describe("menção numa resposta", () => {
     await db.delete(schema.pushSubscriptions);
   });
 });
+
+describe("toggleCommentLike (resposta)", () => {
+  it("curte, conta, descurte e some junto com a resposta", async () => {
+    const id = await seed(BIA, "curte aí");
+
+    state.user = ANA;
+    expect(await actions.toggleCommentLike("review", id)).toEqual({
+      ok: true,
+      liked: true,
+      count: 1,
+    });
+    state.user = CADU;
+    expect(await actions.toggleCommentLike("review", id)).toEqual({
+      ok: true,
+      liked: true,
+      count: 2,
+    });
+
+    // A query traz a contagem e se quem olha curtiu.
+    const daAna = (
+      await comments.listCommentsForReviews([REVIEW_ID], { id: ANA.id, role: "member" })
+    ).get(REVIEW_ID)!;
+    expect(daAna.find((c) => c.id === id)).toMatchObject({ likes: 2, likedByMe: true });
+    const daBia = (
+      await comments.listCommentsForReviews([REVIEW_ID], { id: BIA.id, role: "member" })
+    ).get(REVIEW_ID)!;
+    expect(daBia.find((c) => c.id === id)).toMatchObject({ likes: 2, likedByMe: false });
+
+    state.user = ANA;
+    expect(await actions.toggleCommentLike("review", id)).toEqual({
+      ok: true,
+      liked: false,
+      count: 1,
+    });
+
+    // Apagar a resposta leva as curtidas junto.
+    state.user = BIA;
+    expect(await actions.deleteComment(id)).toEqual({ ok: true });
+    expect(await db.select().from(schema.reviewCommentLikes)).toEqual([]);
+  });
+
+  it("resposta inexistente ou sem sessão não curte", async () => {
+    state.user = ANA;
+    expect(await actions.toggleCommentLike("review", "nada")).toEqual({
+      ok: false,
+      error: "Esse comentário não existe mais.",
+    });
+    expect(await actions.toggleCommentLike("review", "")).toMatchObject({ ok: false });
+    state.user = null;
+    await expect(actions.toggleCommentLike("review", "x")).rejects.toThrow();
+  });
+});

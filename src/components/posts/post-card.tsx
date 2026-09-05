@@ -29,6 +29,8 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
     authorName: comment.author.name,
     authorAvatarId: comment.author.avatarId,
     canDelete: comment.canDelete,
+    likes: comment.likes,
+    likedByMe: comment.likedByMe,
   }));
 
   return (
@@ -37,7 +39,7 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
       // desconta o cabeçalho fixo.
       id={`post-${post.id}`}
       className={cn(
-        "border-border bg-card flex scroll-mt-20 flex-col gap-2 rounded-xl border p-3",
+        "border-border bg-card flex scroll-mt-20 flex-col gap-2 rounded-xl border px-2.5 py-3",
         className,
       )}
     >

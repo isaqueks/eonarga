@@ -894,3 +894,54 @@ describe("ícone da notificação", () => {
     ]);
   });
 });
+
+describe("curtir comentário de post", () => {
+  it("curte e descurte, aparece no feed e some junto com o comentário", async () => {
+    const commentActions = await import("@/actions/comments");
+    const { listPosts } = await import("@/lib/queries/posts");
+    const id = await seedTextPost(); // post da Ana
+    state.user = BIA;
+    expect(await actions.addPostComment(empty, form({ postId: id, body: "curte aí" }))).toEqual({
+      ok: true,
+    });
+    const comment = (await db.select().from(schema.postComments))[0];
+
+    state.user = ADMIN;
+    expect(await commentActions.toggleCommentLike("post", comment.id)).toEqual({
+      ok: true,
+      liked: true,
+      count: 1,
+    });
+    state.user = ANA;
+    expect(await commentActions.toggleCommentLike("post", comment.id)).toEqual({
+      ok: true,
+      liked: true,
+      count: 2,
+    });
+
+    const [asAna] = await listPosts({ id: ANA.id, role: "member" });
+    expect(asAna.comments[0]).toMatchObject({ likes: 2, likedByMe: true });
+    const [asBia] = await listPosts({ id: BIA.id, role: "member" });
+    expect(asBia.comments[0]).toMatchObject({ likes: 2, likedByMe: false });
+    const [anon] = await listPosts(null);
+    expect(anon.comments[0]).toMatchObject({ likes: 2, likedByMe: false });
+
+    expect(await commentActions.toggleCommentLike("post", comment.id)).toEqual({
+      ok: true,
+      liked: false,
+      count: 1,
+    });
+
+    state.user = BIA;
+    expect(await actions.deletePostComment(comment.id)).toEqual({ ok: true });
+    expect(await db.select().from(schema.postCommentLikes)).toEqual([]);
+  });
+
+  it("comentário que não existe não curte", async () => {
+    const commentActions = await import("@/actions/comments");
+    expect(await commentActions.toggleCommentLike("post", "nada")).toEqual({
+      ok: false,
+      error: "Esse comentário não existe mais.",
+    });
+  });
+});

@@ -518,6 +518,12 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   });
   await shot(page, "20b-post-reacao-e-comentario");
 
+  // Curtir o comentário: o coração conta 1 na hora e segue depois do reload.
+  await cardTexto.getByRole("button", { name: "Curtir comentário de Admin", exact: true }).click();
+  await expect(
+    cardTexto.getByRole("button", { name: "Curtir comentário de Admin (1)" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
   // "Responder" no comentário abre a caixa já com "@Admin: "; e digitar "@Adm" sugere
   // o Admin, que ao ser escolhido vira a menção fechada.
   const responder = cardTexto.getByRole("button", { name: "Responder a Admin" }).first();
@@ -546,6 +552,9 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
     "true",
   );
   await expect(cardTexto.locator("p", { hasText: "Segura uma pra mim" })).toBeVisible();
+  await expect(
+    cardTexto.getByRole("button", { name: "Curtir comentário de Admin (1)" }),
+  ).toBeVisible();
   await expect(page.getByText(/Admin reagiu .*no post de Admin/)).toBeVisible();
 
   // --- Post 2: só foto, com a posição marcada no mapa -----------------------

@@ -1,7 +1,8 @@
 import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { reviewComments, reviews, users } from "@/lib/db/schema";
+import { reviewCommentLikes, reviewComments, reviews, users } from "@/lib/db/schema";
+import { loadCommentLikes } from "@/lib/queries/comment-likes";
 import type { Viewer } from "@/lib/queries/reviews";
 
 export interface CommentItem {
@@ -12,6 +13,9 @@ export interface CommentItem {
   author: { id: string; name: string; avatarId: string | null };
   /** Autor da resposta, autor da avaliação ou admin (docs/05 — Permissões). */
   canDelete: boolean;
+  /** Quantas curtidas e se quem olha curtiu. */
+  likes: number;
+  likedByMe: boolean;
 }
 
 /**
@@ -43,7 +47,14 @@ export async function listCommentsForReviews(
     // Empate no milissegundo desempatado pelo id, pra a ordem não dançar entre renders.
     .orderBy(asc(reviewComments.createdAt), asc(reviewComments.id));
 
+  const likes = await loadCommentLikes(
+    reviewCommentLikes,
+    rows.map((row) => row.id),
+    viewer.id,
+  );
+
   for (const row of rows) {
+    const liked = likes.get(row.id);
     const item: CommentItem = {
       id: row.id,
       reviewId: row.reviewId,
@@ -52,6 +63,8 @@ export async function listCommentsForReviews(
       author: { id: row.authorId, name: row.authorName, avatarId: row.authorAvatarId },
       canDelete:
         row.authorId === viewer.id || row.reviewAuthorId === viewer.id || viewer.role === "admin",
+      likes: liked?.count ?? 0,
+      likedByMe: liked?.mine ?? false,
     };
     const list = byReview.get(row.reviewId);
     if (list) list.push(item);

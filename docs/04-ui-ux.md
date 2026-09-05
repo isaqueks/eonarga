@@ -190,6 +190,7 @@ Progresso visível ("1 de 3"). Voltar preserva o que foi digitado. Se o link nã
 Ícone de atividade no header (`/feed`). Do topo pra baixo: título "Novidades", botão primário largo **"📸 Postar"** e a timeline.
 
 - **Post** (card): avatar + nome, "há 5 min", linha "📍 no **Sebo do João**" (link pra ficha) ou "📍 Rua Felipe Schmidt, 123 - Centro" (link pro Maps, aba nova); a foto em largura total, na proporção original, e o texto embaixo respeitando as quebras de linha. Tocar na foto abre em tela cheia. Menu "⋯" com "Apagar" (com confirmação) pra quem postou e pro admin.
+- **Comentário** (em post e em avaliação): avatar pequeno, nome + "há x", texto. Embaixo, "Responder" e "Apagar" em texto pequeno, lado a lado. À direita, o coração de curtir com a contagem (vermelho quando é meu). Card do feed com padding lateral de 10 px (era 12) e a página com 12 px (era 16).
 - **Avaliação** (card, mesmo peso visual): avatar + nome, "há x · visitou em 12/08", a mesma linha de localização, nargas + nota, o veredito em destaque e uma prévia do texto (~280 caracteres) com "… ver avaliação" levando pra ficha.
 - **O resto** (lugar novo, "quero ir"/"já fui", reação, "chamar galera") continua como linha curta com avatar pequeno.
 - "Carregar mais" pagina pelo `?before=` do último evento. Vazio: "Nada aconteceu ainda. / Vai lá fazer acontecer." — com o botão "Postar" ainda visível.

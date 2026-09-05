@@ -171,6 +171,24 @@ export const reviewComments = sqliteTable(
 );
 
 /**
+ * Curtidas em respostas (docs/08 #43): uma por pessoa por resposta, sem emoji —
+ * comentário só tem "curtir". Some junto com a resposta e com a pessoa.
+ */
+export const reviewCommentLikes = sqliteTable(
+  "review_comment_likes",
+  {
+    commentId: text("comment_id")
+      .notNull()
+      .references(() => reviewComments.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.commentId, t.userId] })],
+);
+
+/**
  * Tags livres do lugar ("aceita pix", "fecha cedo"). A tag já entra normalizada
  * (minúscula, sem acento, só [a-z0-9 ]) — ver src/lib/tags.ts —, então a PK
  * composta já serve de dedupe e o índice em `tag` serve pro filtro do ranking.
@@ -334,6 +352,21 @@ export const postComments = sqliteTable(
   (t) => [index("post_comments_post_idx").on(t.postId)],
 );
 
+/** Curtidas em comentários de post: o mesmo desenho de `review_comment_likes`. */
+export const postCommentLikes = sqliteTable(
+  "post_comment_likes",
+  {
+    commentId: text("comment_id")
+      .notNull()
+      .references(() => postComments.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.commentId, t.userId] })],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   places: many(places),
@@ -404,6 +437,22 @@ export const postReactionsRelations = relations(postReactions, ({ one }) => ({
 export const postCommentsRelations = relations(postComments, ({ one }) => ({
   post: one(posts, { fields: [postComments.postId], references: [posts.id] }),
   author: one(users, { fields: [postComments.userId], references: [users.id] }),
+}));
+
+export const reviewCommentLikesRelations = relations(reviewCommentLikes, ({ one }) => ({
+  comment: one(reviewComments, {
+    fields: [reviewCommentLikes.commentId],
+    references: [reviewComments.id],
+  }),
+  user: one(users, { fields: [reviewCommentLikes.userId], references: [users.id] }),
+}));
+
+export const postCommentLikesRelations = relations(postCommentLikes, ({ one }) => ({
+  comment: one(postComments, {
+    fields: [postCommentLikes.commentId],
+    references: [postComments.id],
+  }),
+  user: one(users, { fields: [postCommentLikes.userId], references: [users.id] }),
 }));
 
 export const photosRelations = relations(photos, ({ one }) => ({

@@ -36,7 +36,7 @@ export default async function FeedPage({ searchParams }: PageProps<"/feed">) {
   const hasMore = events.length === PAGE_SIZE && last;
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4">
+    <div className="flex flex-1 flex-col gap-4 px-3 py-4">
       <header className="flex items-baseline justify-between gap-2">
         <h1 className="font-display text-xl">Novidades</h1>
         {before ? (

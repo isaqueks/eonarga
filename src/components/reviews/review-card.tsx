@@ -38,11 +38,16 @@ export function ReviewCard({
     authorName: comment.author.name,
     authorAvatarId: comment.author.avatarId,
     canDelete: comment.canDelete,
+    likes: comment.likes,
+    likedByMe: comment.likedByMe,
   }));
 
   return (
     <article
-      className={cn("border-border bg-card flex flex-col gap-2 rounded-xl border p-3", className)}
+      className={cn(
+        "border-border bg-card flex flex-col gap-2 rounded-xl border px-2.5 py-3",
+        className,
+      )}
     >
       <div className="flex items-start gap-2">
         <UserAvatar name={review.author.name} avatarId={review.author.avatarId} size="md" />

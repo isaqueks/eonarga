@@ -144,6 +144,7 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Um vídeo por vez no feed: dar play pausa os outros (`onPlay` no player), com e2e
 - [x] Menções `@Nome:` (`lib/mentions.ts` puro com teste; `notify-mentions.ts` com push e histórico kind `mention`; `/api/mentions` pro autocomplete; `MentionTextarea` no post e nos comentários; "Responder" pré-preenche; menções em destaque no texto), com testes das actions e e2e
 - [x] Ícones da notificação: badge monocromático de narguilé (`badge-96.png`, desenhado no `generate-icons.ts`) e ícone grande com a foto de quem agiu (`icon` no payload; o SW baixa com a sessão e entrega como data URL, fallback `logo-face.png`), com teste do `sw.js` via `vm`
+- [x] Curtir comentário (`review_comment_likes`/`post_comment_likes`, migration 0010; `toggleCommentLike` em `actions/comments.ts`; coração com contagem no `CommentThread`; "Responder"/"Apagar" viraram linha de texto embaixo do comentário; cards do feed com padding lateral menor), com testes e e2e
 
 ## Definição de pronto (qualquer tarefa)
 

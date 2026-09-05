@@ -2,7 +2,16 @@ import { asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import { REACTION_EMOJIS } from "@/lib/constants";
 import { db } from "@/lib/db/client";
-import { categories, places, postComments, postReactions, posts, users } from "@/lib/db/schema";
+import {
+  categories,
+  places,
+  postCommentLikes,
+  postComments,
+  postReactions,
+  posts,
+  users,
+} from "@/lib/db/schema";
+import { loadCommentLikes } from "@/lib/queries/comment-likes";
 import type { PersonRef } from "@/lib/queries/places";
 import type { ReactionSummary } from "@/lib/queries/reviews";
 import { isVideoExt, type VideoExt } from "@/lib/video-storage";
@@ -44,6 +53,9 @@ export interface PostCommentItem {
   author: PersonRef;
   /** Quem comentou, quem postou (é a thread do post) ou admin (docs/05 — Permissões). */
   canDelete: boolean;
+  /** Quantas curtidas e se quem olha curtiu. */
+  likes: number;
+  likedByMe: boolean;
 }
 
 export interface PostItem {
@@ -207,7 +219,14 @@ async function loadComments(postIds: string[], viewer: PostViewer | null) {
     // Empate no milissegundo desempatado pelo id, pra a ordem não dançar entre renders.
     .orderBy(asc(postComments.createdAt), asc(postComments.id));
 
+  const likes = await loadCommentLikes(
+    postCommentLikes,
+    rows.map((row) => row.id),
+    viewer?.id ?? null,
+  );
+
   for (const row of rows) {
+    const liked = likes.get(row.id);
     const item: PostCommentItem = {
       id: row.id,
       body: row.body,
@@ -216,6 +235,8 @@ async function loadComments(postIds: string[], viewer: PostViewer | null) {
       canDelete:
         viewer !== null &&
         (viewer.role === "admin" || viewer.id === row.authorId || viewer.id === row.postAuthorId),
+      likes: liked?.count ?? 0,
+      likedByMe: liked?.mine ?? false,
     };
     const list = byPost.get(row.postId);
     if (list) list.push(item);
