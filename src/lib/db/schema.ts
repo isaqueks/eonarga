@@ -304,6 +304,12 @@ export const posts = sqliteTable(
     videoExt: text("video_ext"),
     videoWidth: integer("video_width"),
     videoHeight: integer("video_height"),
+    // Áudio do post (docs/08 #47): id no storage + extensão (`webm`/`m4a`/`ogg`/`mp3`/`wav`),
+    // duração medida pelo navegador e forma de onda (JSON com até 128 números de 0 a 1).
+    audioId: text("audio_id"),
+    audioExt: text("audio_ext"),
+    audioDurationMs: integer("audio_duration_ms"),
+    audioPeaks: text("audio_peaks"),
     // Post importado do Instagram (docs/08 #37): o link canônico e o perfil de origem.
     sourceUrl: text("source_url"),
     sourceAuthor: text("source_author"),

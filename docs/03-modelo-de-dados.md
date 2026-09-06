@@ -139,7 +139,7 @@ Arquivos em `UPLOAD_DIR/{id}.webp` e `{id}.thumb.webp`.
 
 ### posts
 
-Post do feed (docs/01 — Feed): foto e/ou texto, sempre com quem postou e de onde.
+Post do feed (docs/01 — Feed): foto, vídeo ou áudio e/ou texto, sempre com quem postou e de onde.
 
 | coluna                    | tipo                 | notas                                                                        |
 | ------------------------- | -------------------- | ---------------------------------------------------------------------------- |
@@ -150,6 +150,9 @@ Post do feed (docs/01 — Feed): foto e/ou texto, sempre com quem postou e de on
 | photo_width, photo_height | int null             | dimensões da variante grande                                                 |
 | video_id, video_ext       | text null            | vídeo no storage (`<id>.mp4`/`.webm`), como veio; com vídeo, a foto é a capa |
 | video_width, video_height | int null             | proporção pro card (do `tkhd` do MP4, ou do navegador)                       |
+| audio_id, audio_ext       | text null            | áudio no storage (`<id>.webm`/`.m4a`/`.ogg`/`.mp3`/`.wav`), como veio        |
+| audio_duration_ms         | int null             | duração medida pelo navegador (WebM gravado não sabe a própria duração)      |
+| audio_peaks               | text null            | forma de onda: JSON com até 128 números de 0 a 1, pro player desenhar        |
 | place_id                  | fk places (set null) | quando o post é de um lugar cadastrado                                       |
 | lat, lng                  | real                 | sempre gravadas, mesmo com `place_id`                                        |
 | address                   | text null            | do lugar, ou do reverse geocoding                                            |

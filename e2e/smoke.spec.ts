@@ -716,6 +716,45 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   });
   expect(estado).toEqual({ primeiroTocavaAntes: true, primeiroPausou: true, segundoToca: true });
 
+  // --- Post 5: áudio gravado no app (microfone falso do Chrome) --------------
+  await page.getByText("📸 Postar").click();
+  await expect(page).toHaveURL(/\/feed\/novo$/);
+  await page.getByRole("button", { name: "🎤 Gravar áudio" }).click();
+  await expect(page.getByRole("group", { name: "Gravando áudio" })).toBeVisible();
+  const parar = page.getByRole("button", { name: "Parar gravação" });
+  await expect(parar).toBeEnabled({ timeout: 15_000 });
+  await page.waitForTimeout(1500);
+  await shot(page, "22c-gravando-audio");
+  await parar.click();
+  const previaAudio = page.getByRole("group", { name: "Prévia do áudio" });
+  await expect(previaAudio).toBeVisible();
+  // A duração medida na gravação já aparece na prévia.
+  await expect(previaAudio.getByText(/^0:0[1-9]$/)).toBeVisible();
+  await page.getByLabel("Texto do post").fill("Áudio do rolê");
+  await abrirOnde(page);
+  await page.getByRole("button", { name: "Escolher lugar" }).click();
+  await page.getByRole("button", { name: /Sebo do João/ }).click();
+  await page.getByRole("button", { name: "Publicar" }).click();
+  await page.waitForURL(/\/feed$/);
+
+  const cardAudio = page.locator("article").filter({ hasText: "Áudio do rolê" });
+  const player = cardAudio.getByRole("group", { name: "Áudio de Admin" });
+  await expect(player).toBeVisible({ timeout: 30_000 });
+  const audioSrc = (await player.locator("audio").getAttribute("src")) ?? "";
+  expect(audioSrc).toMatch(/^\/api\/audios\/[A-Za-z0-9_-]+\.(webm|m4a|ogg)$/);
+  const parcialAudio = await page.request.get(audioSrc, { headers: { range: "bytes=0-9" } });
+  expect(parcialAudio.status()).toBe(206);
+  expect((await parcialAudio.body()).byteLength).toBe(10);
+  await expect(player.getByText(/^0:0[1-9]$/)).toBeVisible();
+  await expect(player.getByRole("slider", { name: "Posição" })).toBeVisible();
+  // Tocar troca o botão pra "Pausar"; a velocidade cicla 1× → 1,5×.
+  await player.getByRole("button", { name: "Tocar" }).click();
+  await expect(player.getByRole("button", { name: "Pausar" })).toBeVisible({ timeout: 10_000 });
+  await player.getByRole("button", { name: "Velocidade 1×" }).click();
+  await expect(player.getByRole("button", { name: "Velocidade 1,5×" })).toBeVisible();
+  await shot(page, "22d-feed-com-audio");
+  await player.getByRole("button", { name: "Pausar" }).click();
+
   // --- Apagar o post da foto pelo menu "⋯" ----------------------------------
   const apagar = page.getByRole("menuitem", { name: /Apagar/ });
   for (let attempt = 0; attempt < 6; attempt++) {

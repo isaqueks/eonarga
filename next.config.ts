@@ -88,7 +88,7 @@ function securityHeaders() {
     { key: "X-Frame-Options", value: "DENY" },
     // Manda só a origem pra terceiros (os tiles do OSM pedem pra saber quem chama).
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-    { key: "Permissions-Policy", value: "geolocation=(self), camera=(self), microphone=()" },
+    { key: "Permissions-Policy", value: "geolocation=(self), camera=(self), microphone=(self)" },
   ];
 }
 

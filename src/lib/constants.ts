@@ -17,6 +17,10 @@ export const CONTENT_HTML_MAX = 40_000;
 export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 /** Vídeo de post: 60 MB, guardado como veio (docs/08 #39). */
 export const VIDEO_MAX_BYTES = 60 * 1024 * 1024;
+/** Áudio de post: 20 MB, guardado como veio (docs/08 #47). Cinco minutos de Opus dão ~2 MB. */
+export const AUDIO_MAX_BYTES = 20 * 1024 * 1024;
+/** Gravação de áudio no app para sozinha em 5 min. */
+export const AUDIO_MAX_MS = 5 * 60 * 1000;
 
 /** Resposta numa avaliação: texto puro, curto de propósito (é thread, não ensaio). */
 export const COMMENT_MAX = 500;

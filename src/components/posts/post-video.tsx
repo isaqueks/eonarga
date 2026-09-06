@@ -6,11 +6,11 @@ import type { PostVideo as PostVideoData } from "@/lib/queries/posts";
 
 /**
  * Um vídeo por vez (docs/08 #40): quando este começa a tocar, pausa qualquer outro
- * `<video>` da página — o feed é uma lista, e dois tocando juntos é barulho.
+ * `<video>` ou `<audio>` da página — o feed é uma lista, e dois tocando juntos é barulho.
  */
 function pauseOthers(event: SyntheticEvent<HTMLVideoElement>) {
   const me = event.currentTarget;
-  for (const other of document.querySelectorAll("video")) {
+  for (const other of document.querySelectorAll<HTMLMediaElement>("video, audio")) {
     if (other !== me && !other.paused) other.pause();
   }
 }

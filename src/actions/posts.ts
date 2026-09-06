@@ -7,6 +7,14 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { field, fieldErrorsFrom, type FormState } from "@/actions/form-state";
+import { parseDurationMs, parsePeaks } from "@/lib/audio";
+import {
+  deleteAudio,
+  MAX_AUDIO_BYTES,
+  saveAudio,
+  sniffAudioExt,
+  type AudioExt,
+} from "@/lib/audio-storage";
 import { assertUser } from "@/lib/auth/guards";
 import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
@@ -35,11 +43,13 @@ const PHOTO_THUMB_SIZE = 400;
 const POST_RATE_LIMIT = { limit: 20, windowMs: 60 * 60 * 1000 };
 
 // Módulo "use server": só exporta função async, então as mensagens ficam privadas.
-const EMPTY_POST = "Manda uma foto, um vídeo ou escreve alguma coisa.";
+const EMPTY_POST = "Manda uma foto, um vídeo, um áudio ou escreve alguma coisa.";
 const PLACE_NOT_FOUND = "Lugar não encontrado.";
 const PLACE_ARCHIVED = "Esse lugar está arquivado.";
 const TOO_BIG = "Foto grande demais (máximo 10 MB).";
 const VIDEO_TOO_BIG = "Vídeo grande demais (máximo 60 MB).";
+const AUDIO_TOO_BIG = "Áudio grande demais (máximo 20 MB).";
+const NOT_AUDIO = "Isso não é um áudio que eu reconheça.";
 const NOT_AN_IMAGE = "Isso não é foto nem vídeo que eu reconheça.";
 // O sharp que vem pronto só decodifica HEIF em AV1; HEIC de iPhone (HEVC) fica de fora.
 const HEIC_NOT_SUPPORTED = "Não consegui abrir essa foto. Tenta mandar em JPEG ou PNG.";
@@ -58,7 +68,10 @@ const NOT_YOURS = "Só quem postou (ou admin) pode apagar.";
  * dava pra gravar um post "no Sebo do João" com coordenada de Curitiba.
  *
  * A foto é reprocessada pelo sharp (webp, sem EXIF) antes de tocar o disco — ver
- * `src/lib/storage.ts` e docs/05, "Upload malicioso".
+ * `src/lib/storage.ts` e docs/05, "Upload malicioso". Vídeo e áudio entram como vieram,
+ * conferidos pelos magic bytes; o que separa um do outro é o tipo que o formulário
+ * declarou (o gravador manda `audio/…`), porque um WebM só de som tem o mesmo cabeçalho
+ * de um WebM com imagem.
  */
 export async function createPost(_prevState: FormState, formData: FormData): Promise<FormState> {
   const { user } = await assertUser();
@@ -91,15 +104,23 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
   }
   const input = parsed.data;
 
-  // Três inputs no formulário (câmera de foto, câmera de vídeo, galeria); vale o
-  // primeiro que veio com arquivo. Foto ou vídeo é decidido pelos magic bytes.
-  const upload = ["video", "photo", "media"]
-    .map((name) => formData.get(name))
-    .find((value): value is File => value instanceof File && value.size > 0);
+  // Quatro inputs no formulário (câmera de foto, câmera de vídeo, gravador de áudio,
+  // galeria); vale o primeiro que veio com arquivo. Áudio é o que veio pelo `audio` ou
+  // se declarou `audio/*`; foto ou vídeo é decidido pelos magic bytes.
+  const upload = ["video", "photo", "audio", "media"]
+    .map((name) => ({ name, value: formData.get(name) }))
+    .find((entry): entry is { name: string; value: File } => {
+      return entry.value instanceof File && entry.value.size > 0;
+    });
   const hasUpload = upload !== undefined;
+  const isAudioUpload =
+    hasUpload && (upload.name === "audio" || upload.value.type.startsWith("audio/"));
   // Mídia importada do Instagram: já está no storage, "no palco" (docs/08 #37).
   const importedPhotoId = field(formData, "importedPhotoId").trim();
-  if (hasUpload && upload.size > MAX_VIDEO_BYTES) {
+  if (hasUpload && isAudioUpload && upload.value.size > MAX_AUDIO_BYTES) {
+    return { ok: false, fieldErrors: { photo: AUDIO_TOO_BIG } };
+  }
+  if (hasUpload && !isAudioUpload && upload.value.size > MAX_VIDEO_BYTES) {
     return { ok: false, fieldErrors: { photo: VIDEO_TOO_BIG } };
   }
   if (!hasUpload && !importedPhotoId && !input.body) {
@@ -119,6 +140,8 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
 
   let saved: { id: string; width: number; height: number } | null = null;
   let video: { id: string; ext: VideoExt; width: number; height: number } | null = null;
+  let audio: { id: string; ext: AudioExt; durationMs: number; peaks: number[] | null } | null =
+    null;
   let source: { url: string; author: string | null } | null = null;
   if (!hasUpload && importedPhotoId) {
     const staged = takeStagedImport(importedPhotoId, user.id);
@@ -133,15 +156,32 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
     }
     source = { url: staged.sourceUrl, author: staged.sourceAuthor };
   }
-  if (hasUpload) {
+  if (hasUpload && isAudioUpload) {
+    if (importedPhotoId) await discardStagedImport(importedPhotoId, user.id);
+    const buffer = Buffer.from(await upload.value.arrayBuffer());
+    const audioExt = sniffAudioExt(buffer);
+    if (!audioExt) return { ok: false, fieldErrors: { photo: NOT_AUDIO } };
+    try {
+      const stored = await saveAudio(buffer, audioExt);
+      // Duração e forma de onda vêm do navegador, só pra exibição: lixo vira 0 / null.
+      audio = {
+        id: stored.id,
+        ext: stored.ext,
+        durationMs: parseDurationMs(field(formData, "audioDurationMs")) ?? 0,
+        peaks: parsePeaks(field(formData, "audioPeaks")),
+      };
+    } catch {
+      return { ok: false, error: SAVE_FAILED };
+    }
+  } else if (hasUpload) {
     // Mandou arquivo próprio por cima do importado: o importado vira lixo.
     if (importedPhotoId) await discardStagedImport(importedPhotoId, user.id);
     // Foto grande demais nem é aberta; o tipo declarado só escolhe a mensagem, quem
     // decide o que o arquivo é continua sendo o magic byte logo abaixo.
-    if (upload.type.startsWith("image/") && upload.size > MAX_UPLOAD_BYTES) {
+    if (upload.value.type.startsWith("image/") && upload.value.size > MAX_UPLOAD_BYTES) {
       return { ok: false, fieldErrors: { photo: TOO_BIG } };
     }
-    const buffer = Buffer.from(await upload.arrayBuffer());
+    const buffer = Buffer.from(await upload.value.arrayBuffer());
 
     // O `Content-Type` do upload é chute do cliente: quem manda é o magic byte (docs/05).
     const videoExt = sniffVideoExt(buffer);
@@ -181,6 +221,10 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
       videoExt: video?.ext ?? null,
       videoWidth: video?.width ?? null,
       videoHeight: video?.height ?? null,
+      audioId: audio?.id ?? null,
+      audioExt: audio?.ext ?? null,
+      audioDurationMs: audio?.durationMs ?? null,
+      audioPeaks: audio?.peaks ? JSON.stringify(audio.peaks) : null,
       placeId: place?.id ?? null,
       lat: input.lat,
       lng: input.lng,
@@ -192,6 +236,7 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
     // Sem linha no banco a mídia é lixo: apaga os arquivos em vez de deixar órfão.
     if (saved) await deleteImage(saved.id);
     if (video) await deleteVideo(video.id);
+    if (audio) await deleteAudio(audio.id);
     return { ok: false, error: SAVE_FAILED };
   }
 
@@ -210,7 +255,7 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
   redirect("/feed");
 }
 
-/** Apaga o post e a foto/vídeo dele. Só quem postou, ou admin. */
+/** Apaga o post e a foto/vídeo/áudio dele. Só quem postou, ou admin. */
 export async function deletePost(postId: string): Promise<FormState> {
   const { user } = await assertUser();
   if (typeof postId !== "string" || postId === "") {
@@ -218,7 +263,13 @@ export async function deletePost(postId: string): Promise<FormState> {
   }
 
   const rows = await db
-    .select({ id: posts.id, userId: posts.userId, photoId: posts.photoId, videoId: posts.videoId })
+    .select({
+      id: posts.id,
+      userId: posts.userId,
+      photoId: posts.photoId,
+      videoId: posts.videoId,
+      audioId: posts.audioId,
+    })
     .from(posts)
     .where(eq(posts.id, postId))
     .limit(1);
@@ -233,6 +284,7 @@ export async function deletePost(postId: string): Promise<FormState> {
   // Só depois de a linha sumir é que os arquivos viram lixo.
   if (post.photoId) await deleteImage(post.photoId);
   if (post.videoId) await deleteVideo(post.videoId);
+  if (post.audioId) await deleteAudio(post.audioId);
 
   revalidatePath("/feed");
   return { ok: true };

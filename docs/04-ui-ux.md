@@ -190,6 +190,7 @@ Progresso visível ("1 de 3"). Voltar preserva o que foi digitado. Se o link nã
 Ícone de atividade no header (`/feed`). Do topo pra baixo: título "Novidades", botão primário largo **"📸 Postar"** e a timeline.
 
 - **Post** (card): avatar + nome, "há 5 min", linha "📍 no **Sebo do João**" (link pra ficha) ou "📍 Rua Felipe Schmidt, 123 - Centro" (link pro Maps, aba nova); a foto em largura total, na proporção original, e o texto embaixo respeitando as quebras de linha. Tocar na foto abre em tela cheia. Menu "⋯" com "Apagar" (com confirmação) pra quem postou e pro admin.
+- **Áudio** (no card do post): player próprio no estilo mensagem de voz, sem o `<audio controls>` do navegador. Botão redondo âmbar (tocar/pausar, com spinner enquanto carrega), forma de onda de 64 barras que vai pintando de âmbar conforme toca (barras iguais quando o arquivo não trouxe desenho), tempo embaixo (a duração parado, o decorrido tocando) e um botão "1×" que cicla 1× → 1,5× → 2×. Tocar na onda busca no tempo; com teclado, setas andam 5 s. Erro de formato vira "Não deu pra tocar esse áudio aqui." no lugar do tempo.
 - **Comentário** (em post e em avaliação): avatar pequeno, nome + "há x", texto. Embaixo, "Responder" e "Apagar" em texto pequeno, lado a lado. À direita, o coração de curtir com a contagem (vermelho quando é meu). Card do feed com padding lateral de 10 px (era 12) e a página com 12 px (era 16).
 - **Avaliação** (card, mesmo peso visual): avatar + nome, "há x · visitou em 12/08", a mesma linha de localização, nargas + nota, o veredito em destaque e uma prévia do texto (~280 caracteres) com "… ver avaliação" levando pra ficha.
 - **O resto** (lugar novo, "quero ir"/"já fui", reação, "chamar galera") continua como linha curta com avatar pequeno.
@@ -199,10 +200,10 @@ Progresso visível ("1 de 3"). Voltar preserva o que foi digitado. Se o link nã
 
 Tela única (`/feed/novo`), tudo opcional menos o "onde":
 
-1. **📷 Foto** — abre a câmera traseira direto (`capture="environment"`). Escolheu, aparece a prévia com um "Tirar" pra desistir.
+1. **📷 Foto / 🎬 Vídeo / 🎤 Áudio / 🖼️ Galeria** — foto e vídeo abrem a câmera direto (`capture="environment"`); a galeria aceita foto, vídeo ou áudio. **Gravar áudio** grava no próprio app: um painel com bolinha vermelha, relógio, medidor ao vivo (as últimas 40 leituras do microfone), "Parar" e "Cancelar"; para sozinho em 5 min. Escolheu ou gravou, aparece a prévia (o mesmo player do feed, no caso do áudio) com um "Tirar" pra desistir. Sem microfone liberado, o painel explica o que fazer.
 2. **Texto** — "O que tá rolando?", cresce até ~6 linhas, contador `19/1000`.
 3. **Onde você tá?** — três botões: **Onde estou** (padrão, já pede o GPS ao abrir), **Escolher lugar** (busca por nome, ordenada por distância quando tem GPS) e **Marcar no mapa** (pino arrastável). Perto de um lugar cadastrado, o GPS pergunta "Você tá no **Sebo do João**?" com "Sim" / "Não, só o endereço". Escolhido, vira uma linha "📍 …" com "Trocar" do lado. Sem GPS: "Sem GPS. Escolhe o lugar ou marca no mapa."
-4. **Publicar** — desabilitado até ter o "onde" e pelo menos foto ou texto; embaixo, a explicação do que falta.
+4. **Publicar** — desabilitado até ter o "onde" e pelo menos foto, vídeo, áudio ou texto; embaixo, a explicação do que falta.
 
 ### Galera (`/galera`)
 

@@ -247,7 +247,7 @@ describe("createPost", () => {
     const result = await actions.createPost(empty, form(AQUI));
     expect(result).toEqual({
       ok: false,
-      fieldErrors: { body: "Manda uma foto, um vídeo ou escreve alguma coisa." },
+      fieldErrors: { body: "Manda uma foto, um vídeo, um áudio ou escreve alguma coisa." },
     });
     expect(await db.select().from(schema.posts)).toHaveLength(0);
   });
@@ -662,6 +662,101 @@ describe("createPost com foto importada do Instagram", () => {
     expect(post.photoId).not.toBe(photoId);
     expect(post.sourceUrl).toBeNull();
     expect(fileExists(photoId, ".webp")).toBe(false);
+  });
+});
+
+describe("createPost com áudio", () => {
+  const FIXTURES = path.resolve("e2e/fixtures");
+  const wav = () => fs.readFileSync(path.join(FIXTURES, "tiny.wav"));
+  const webm = () => fs.readFileSync(path.join(FIXTURES, "tiny.webm"));
+
+  function audioFile(buffer: Buffer, name = "gravacao.wav", type = "audio/wav"): File {
+    return new File([new Uint8Array(buffer)], name, { type });
+  }
+
+  it("publica a gravação do app (campo audio) com duração e forma de onda", async () => {
+    const fd = form({
+      ...AQUI,
+      body: "ouve isso",
+      audioDurationMs: "7400",
+      audioPeaks: "[0,0.5,1]",
+    });
+    fd.set("audio", audioFile(webm(), "gravacao.webm", "audio/webm;codecs=opus"));
+    await expect(actions.createPost(empty, fd)).rejects.toThrow(/NEXT_REDIRECT/);
+
+    const post = await onlyPost();
+    expect(post).toMatchObject({
+      body: "ouve isso",
+      photoId: null,
+      videoId: null,
+      audioExt: "webm",
+      audioDurationMs: 7400,
+      audioPeaks: "[0,0.5,1]",
+    });
+    expect(post.audioId).toBeTruthy();
+    expect(fs.existsSync(path.join(uploadDir, `${post.audioId}.webm`))).toBe(true);
+
+    const { listPosts } = await import("@/lib/queries/posts");
+    const [item] = await listPosts({ id: ANA.id, role: "member" });
+    expect(item.audio).toEqual({
+      id: post.audioId,
+      url: `/api/audios/${post.audioId}.webm`,
+      ext: "webm",
+      durationMs: 7400,
+      peaks: [0, 0.5, 1],
+    });
+    expect(item.video).toBeNull();
+  });
+
+  it("áudio da galeria (tipo audio/*) entra pelo mesmo caminho; sem texto também vale", async () => {
+    const fd = form({ ...AQUI });
+    fd.set("media", audioFile(wav(), "nota.wav", "audio/wav"));
+    await expect(actions.createPost(empty, fd)).rejects.toThrow(/NEXT_REDIRECT/);
+    expect(await onlyPost()).toMatchObject({
+      body: null,
+      audioExt: "wav",
+      audioDurationMs: 0,
+      audioPeaks: null,
+    });
+  });
+
+  it("duração e forma de onda inválidas viram 0 / null, sem derrubar o post", async () => {
+    const fd = form({ ...AQUI, audioDurationMs: "-5", audioPeaks: "[2]" });
+    fd.set("audio", audioFile(wav()));
+    await expect(actions.createPost(empty, fd)).rejects.toThrow(/NEXT_REDIRECT/);
+    expect(await onlyPost()).toMatchObject({ audioDurationMs: 0, audioPeaks: null });
+  });
+
+  it("recusa áudio grande demais e arquivo declarado áudio que não é áudio", async () => {
+    const big = new File([new Uint8Array(20 * 1024 * 1024 + 1)], "grande.wav", {
+      type: "audio/wav",
+    });
+    const fd = form({ ...AQUI, body: "x" });
+    fd.set("audio", big);
+    expect(await actions.createPost(empty, fd)).toEqual({
+      ok: false,
+      fieldErrors: { photo: "Áudio grande demais (máximo 20 MB)." },
+    });
+
+    const fd2 = form({ ...AQUI, body: "x" });
+    fd2.set("audio", audioFile(Buffer.from("isso nao e audio nenhum, so texto"), "x.wav"));
+    expect(await actions.createPost(empty, fd2)).toEqual({
+      ok: false,
+      fieldErrors: { photo: "Isso não é um áudio que eu reconheça." },
+    });
+    expect(await db.select().from(schema.posts)).toHaveLength(0);
+  });
+
+  it("apagar o post apaga o áudio", async () => {
+    const fd = form({ ...AQUI, body: "some" });
+    fd.set("audio", audioFile(wav()));
+    await expect(actions.createPost(empty, fd)).rejects.toThrow(/NEXT_REDIRECT/);
+    const post = await onlyPost();
+    const file = path.join(uploadDir, `${post.audioId}.wav`);
+    expect(fs.existsSync(file)).toBe(true);
+
+    expect(await actions.deletePost(post.id)).toEqual({ ok: true });
+    expect(fs.existsSync(file)).toBe(false);
   });
 });
 

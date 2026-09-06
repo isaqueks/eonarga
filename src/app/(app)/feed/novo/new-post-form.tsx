@@ -15,14 +15,17 @@ import { EMPTY_FORM_STATE } from "@/actions/form-state";
 import { discardInstagramImport, importInstagramPost } from "@/actions/instagram";
 import { createPost } from "@/actions/posts";
 import { LocationPickerLazy } from "@/components/map/location-picker-lazy";
+import { AudioPlayer } from "@/components/posts/audio-player";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MentionTextarea } from "@/components/mentions/mention-textarea";
 import { extractInstagramLink } from "@/lib/instagram";
 import { formatLatLng, haversineMeters, nearestPlace, POST_BODY_MAX } from "@/lib/posts";
-import { PHOTO_MAX_BYTES, VIDEO_MAX_BYTES } from "@/lib/constants";
+import { AUDIO_MAX_BYTES, PHOTO_MAX_BYTES, VIDEO_MAX_BYTES } from "@/lib/constants";
 import type { PostPlaceOption } from "@/lib/queries/posts";
 import { cn } from "@/lib/utils";
+
+import { analyzeAudioFile, AudioRecorder, canRecordAudio, type Recording } from "./audio-recorder";
 
 /** Os três jeitos de dizer de onde você tá postando. */
 type Mode = "gps" | "place" | "map";
@@ -39,10 +42,14 @@ interface Chosen {
 const NO_GPS = "Sem GPS. Escolhe o lugar ou marca no mapa.";
 const VIDEO_TOO_BIG = "Vídeo grande demais (máximo 60 MB). Corta ele antes.";
 const PHOTO_TOO_BIG = "Foto grande demais (máximo 10 MB).";
+const AUDIO_TOO_BIG = "Áudio grande demais (máximo 20 MB).";
+const NO_RECORDER = "Esse navegador não grava áudio. Manda um da galeria.";
 
-/** O que está na prévia: um arquivo escolhido ou a mídia importada do Instagram. */
+/** O que está na prévia: um arquivo escolhido, uma gravação ou a mídia importada do Instagram. */
 type Preview =
-  { kind: "image"; url: string } | { kind: "video"; url: string; poster: string | null };
+  | { kind: "image"; url: string }
+  | { kind: "video"; url: string; poster: string | null }
+  | { kind: "audio"; url: string; durationMs: number; peaks: number[] | null };
 
 /** Endereço a partir do ponto (Nominatim pelo servidor). Sem resposta, fica a coordenada. */
 async function fetchAddress(lat: number, lng: number): Promise<string | null> {
@@ -98,11 +105,18 @@ export function NewPostForm({
   const [mediaError, setMediaError] = useState<string | null>(null);
   // Proporção do vídeo escolhido, lida da prévia: vai pro servidor só pra layout do card.
   const [videoDims, setVideoDims] = useState<{ width: number; height: number } | null>(null);
-  // Três inputs: câmera de foto, câmera de vídeo e galeria (foto ou vídeo). Só um
+  // Três inputs: câmera de foto, câmera de vídeo e galeria (foto, vídeo ou áudio). Só um
   // deles carrega arquivo por vez; o servidor pega o primeiro que veio.
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  // Áudio gravado no app: não passa por input, vai direto no FormData ao publicar.
+  const [recording, setRecording] = useState(false);
+  const [recorded, setRecorded] = useState<Recording | null>(null);
+  // Duração e forma de onda do áudio (gravado ou da galeria): só pra exibição no card.
+  const [audioMeta, setAudioMeta] = useState<{ durationMs: number; peaks: number[] | null } | null>(
+    null,
+  );
 
   // Foto importada do Instagram: já está no storage, "no palco" até publicar (docs/08 #37).
   const [imported, setImported] = useState<{ photoId: string } | null>(null);
@@ -195,6 +209,29 @@ export function NewPostForm({
     }
   }
 
+  /** Joga fora a gravação (a URL da prévia é devolvida pelo efeito lá em cima). */
+  function dropRecording() {
+    setRecorded(null);
+    setAudioMeta(null);
+  }
+
+  function startRecording() {
+    if (!canRecordAudio()) {
+      setMediaError(NO_RECORDER);
+      return;
+    }
+    clearMedia();
+    setRecording(true);
+  }
+
+  function finishRecording(next: Recording) {
+    setRecording(false);
+    setRecorded(next);
+    setAudioMeta({ durationMs: next.durationMs, peaks: next.peaks });
+    setPreview({ kind: "audio", url: next.url, durationMs: next.durationMs, peaks: next.peaks });
+    setHasMedia(true);
+  }
+
   /** Desiste da foto importada: some do palco e do disco. */
   function dropImported() {
     if (!imported) return;
@@ -207,22 +244,41 @@ export function NewPostForm({
     const file = input.files?.[0] ?? null;
     if (!file) return;
     dropImported();
+    dropRecording();
     clearInputs(input);
     setMediaError(null);
     setVideoDims(null);
 
     const isVideo = file.type.startsWith("video/");
+    const isAudio = file.type.startsWith("audio/");
+    if (isAudio && file.size > AUDIO_MAX_BYTES) {
+      input.value = "";
+      setMediaError(AUDIO_TOO_BIG);
+      return;
+    }
     if (isVideo && file.size > VIDEO_MAX_BYTES) {
       input.value = "";
       setMediaError(VIDEO_TOO_BIG);
       return;
     }
-    if (!isVideo && file.size > PHOTO_MAX_BYTES) {
+    if (!isVideo && !isAudio && file.size > PHOTO_MAX_BYTES) {
       input.value = "";
       setMediaError(PHOTO_TOO_BIG);
       return;
     }
     const url = URL.createObjectURL(file);
+    if (isAudio) {
+      // A prévia aparece na hora; duração e forma de onda chegam quando o navegador
+      // terminar de decodificar (ou não chegam, e o post entra sem desenho).
+      setPreview({ kind: "audio", url, durationMs: 0, peaks: null });
+      setHasMedia(true);
+      void analyzeAudioFile(file).then((meta) => {
+        if (galleryInputRef.current?.files?.[0] !== file) return;
+        setAudioMeta(meta);
+        setPreview({ kind: "audio", url, ...meta });
+      });
+      return;
+    }
     setPreview(isVideo ? { kind: "video", url, poster: null } : { kind: "image", url });
     setHasMedia(true);
   }
@@ -230,6 +286,7 @@ export function NewPostForm({
   function clearMedia() {
     clearInputs();
     dropImported();
+    dropRecording();
     setHasMedia(false);
     setPreview(null);
     setVideoDims(null);
@@ -276,8 +333,14 @@ export function NewPostForm({
 
   const canPublish = chosen !== null && (hasMedia || body.trim().length > 0);
 
+  /** A gravação vai no FormData na hora de publicar, como se fosse um input `audio`. */
+  function submit(formData: FormData) {
+    if (recorded) formData.set("audio", recorded.blob, `gravacao.${recorded.ext}`);
+    formAction(formData);
+  }
+
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form action={submit} className="flex flex-col gap-4">
       <input type="hidden" name="placeId" value={chosen?.placeId ?? ""} />
       <input type="hidden" name="lat" value={chosen ? String(chosen.lat) : ""} />
       <input type="hidden" name="lng" value={chosen ? String(chosen.lng) : ""} />
@@ -285,8 +348,14 @@ export function NewPostForm({
       <input type="hidden" name="importedPhotoId" value={imported?.photoId ?? ""} />
       <input type="hidden" name="videoWidth" value={videoDims?.width ?? ""} />
       <input type="hidden" name="videoHeight" value={videoDims?.height ?? ""} />
+      <input type="hidden" name="audioDurationMs" value={audioMeta?.durationMs ?? ""} />
+      <input
+        type="hidden"
+        name="audioPeaks"
+        value={audioMeta?.peaks ? JSON.stringify(audioMeta.peaks) : ""}
+      />
 
-      {/* 1. Foto ou vídeo (opcional) */}
+      {/* 1. Foto, vídeo ou áudio (opcional) */}
       <section className="flex flex-col gap-2">
         {/* `capture` abre a câmera no celular (foto ou vídeo); a galeria deixa o
             navegador oferecer os arquivos, foto ou vídeo. */}
@@ -314,12 +383,33 @@ export function NewPostForm({
           ref={galleryInputRef}
           type="file"
           name="media"
-          accept="image/*,video/*"
+          accept="image/*,video/*,audio/*"
           className="sr-only"
-          aria-label="Foto ou vídeo da galeria"
+          aria-label="Foto, vídeo ou áudio da galeria"
           onChange={handleFileChange}
         />
-        {preview ? (
+        {recording ? (
+          <AudioRecorder onDone={finishRecording} onCancel={() => setRecording(false)} />
+        ) : preview?.kind === "audio" ? (
+          <div className="flex flex-col gap-2">
+            <AudioPlayer
+              src={preview.url}
+              durationMs={preview.durationMs}
+              peaks={preview.peaks}
+              label="Prévia do áudio"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-10 self-end"
+              onClick={clearMedia}
+            >
+              <X className="size-4" aria-hidden />
+              Tirar
+            </Button>
+          </div>
+        ) : preview ? (
           <div className="border-border bg-muted relative overflow-hidden rounded-xl border">
             {preview.kind === "video" ? (
               <video
@@ -379,15 +469,26 @@ export function NewPostForm({
                 🎬 Gravar vídeo
               </Button>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="h-12 w-full text-base"
-              onClick={() => galleryInputRef.current?.click()}
-            >
-              🖼️ Da galeria (foto ou vídeo)
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-12 flex-1 text-base"
+                onClick={startRecording}
+              >
+                🎤 Gravar áudio
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-12 flex-1 text-base"
+                onClick={() => galleryInputRef.current?.click()}
+              >
+                🖼️ Da galeria
+              </Button>
+            </div>
           </>
         )}
         {mediaError ? (
@@ -395,7 +496,7 @@ export function NewPostForm({
             {mediaError}
           </p>
         ) : null}
-        {!preview ? (
+        {!preview && !recording ? (
           <Button
             type="button"
             variant="outline"
@@ -531,7 +632,7 @@ export function NewPostForm({
       </Button>
       {!canPublish ? (
         <p className="text-muted-foreground -mt-2 text-center text-xs">
-          Precisa de onde você tá e de uma foto, um vídeo ou um texto.
+          Precisa de onde você tá e de uma foto, um vídeo, um áudio ou um texto.
         </p>
       ) : null}
     </form>

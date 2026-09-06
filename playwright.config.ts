@@ -46,7 +46,11 @@ export default defineConfig({
     timezoneId: "America/Sao_Paulo",
     // Sem GPS de verdade: o botão "onde estou" recebe a Praça XV.
     geolocation: { latitude: -27.5975, longitude: -48.55 },
-    permissions: ["geolocation", "clipboard-read", "clipboard-write"],
+    permissions: ["geolocation", "clipboard-read", "clipboard-write", "microphone"],
+    // Microfone falso do Chrome (um tom com bipes) pro "Gravar áudio" gravar de verdade.
+    launchOptions: {
+      args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+    },
   },
   projects: [
     {

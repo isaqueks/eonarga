@@ -14,6 +14,7 @@ import {
 import { loadCommentLikes } from "@/lib/queries/comment-likes";
 import type { PersonRef } from "@/lib/queries/places";
 import type { ReactionSummary } from "@/lib/queries/reviews";
+import { isAudioExt, type AudioExt } from "@/lib/audio-storage";
 import { isVideoExt, type VideoExt } from "@/lib/video-storage";
 
 export interface PostPhoto {
@@ -34,6 +35,18 @@ export interface PostVideo {
   ext: VideoExt;
   width: number;
   height: number;
+}
+
+/** O áudio do post (docs/08 #47), pro player do card. */
+export interface PostAudio {
+  id: string;
+  /** `/api/audios/<id>.<ext>`, com Range. */
+  url: string;
+  ext: AudioExt;
+  /** Duração medida pelo navegador ao gravar/escolher; 0 quando não veio. */
+  durationMs: number;
+  /** Forma de onda (0..1), ou null: aí o player desenha barras iguais. */
+  peaks: number[] | null;
 }
 
 /** O lugar cadastrado de onde o post saiu, quando foi de um. */
@@ -63,6 +76,7 @@ export interface PostItem {
   body: string | null;
   photo: PostPhoto | null;
   video: PostVideo | null;
+  audio: PostAudio | null;
   place: PostPlaceRef | null;
   lat: number;
   lng: number;
@@ -110,6 +124,10 @@ const columns = {
   videoExt: posts.videoExt,
   videoWidth: posts.videoWidth,
   videoHeight: posts.videoHeight,
+  audioId: posts.audioId,
+  audioExt: posts.audioExt,
+  audioDurationMs: posts.audioDurationMs,
+  audioPeaks: posts.audioPeaks,
   lat: posts.lat,
   lng: posts.lng,
   address: posts.address,
@@ -135,6 +153,10 @@ type PostRow = {
   videoExt: string | null;
   videoWidth: number | null;
   videoHeight: number | null;
+  audioId: string | null;
+  audioExt: string | null;
+  audioDurationMs: number | null;
+  audioPeaks: string | null;
   lat: number;
   lng: number;
   address: string | null;
@@ -149,6 +171,17 @@ type PostRow = {
   authorName: string;
   authorAvatarId: string | null;
 };
+
+/** A forma de onda gravada como JSON; qualquer coisa estranha no banco vira null. */
+function parseStoredPeaks(raw: string | null): number[] | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value) && value.every((n) => typeof n === "number") ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 const EMOJI_ORDER = new Map<string, number>(REACTION_EMOJIS.map((emoji, i) => [emoji, i]));
 
@@ -272,6 +305,16 @@ function toItem(
             ext: row.videoExt,
             width: row.videoWidth ?? 0,
             height: row.videoHeight ?? 0,
+          }
+        : null,
+    audio:
+      row.audioId && row.audioExt && isAudioExt(row.audioExt)
+        ? {
+            id: row.audioId,
+            url: `/api/audios/${row.audioId}.${row.audioExt}`,
+            ext: row.audioExt,
+            durationMs: row.audioDurationMs ?? 0,
+            peaks: parseStoredPeaks(row.audioPeaks),
           }
         : null,
     place:

@@ -10,6 +10,7 @@ import { formatLatLng } from "@/lib/posts";
 import type { PostItem } from "@/lib/queries/posts";
 import { cn } from "@/lib/utils";
 
+import { AudioPlayer } from "./audio-player";
 import { PostMenu } from "./post-menu";
 import { PostPhoto } from "./post-photo";
 import { PostVideo } from "./post-video";
@@ -84,6 +85,15 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
         />
       ) : post.photo ? (
         <PostPhoto photo={post.photo} authorName={post.author.name} />
+      ) : null}
+
+      {post.audio ? (
+        <AudioPlayer
+          src={post.audio.url}
+          durationMs={post.audio.durationMs}
+          peaks={post.audio.peaks}
+          label={`Áudio de ${post.author.name}`}
+        />
       ) : null}
 
       {post.body ? (
