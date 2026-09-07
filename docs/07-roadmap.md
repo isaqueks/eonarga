@@ -146,9 +146,10 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Ícones da notificação: badge monocromático de narguilé (`badge-96.png`, desenhado no `generate-icons.ts`) e ícone grande com a foto de quem agiu (`icon` no payload; o SW baixa com a sessão e entrega como data URL, fallback `logo-face.png`), com teste do `sw.js` via `vm`
 - [x] Curtir comentário (`review_comment_likes`/`post_comment_likes`, migration 0010; `toggleCommentLike` em `actions/comments.ts`; coração com contagem no `CommentThread`; "Responder"/"Apagar" viraram linha de texto embaixo do comentário; cards do feed com padding lateral menor), com testes e e2e
 - [x] Push "fulano curtiu seu comentário/sua resposta" pra quem escreveu (`notifyCommentLiked` em `actions/comments.ts`, kind `like`, uma por hora por pessoa/comentário), com testes
-- [x] "Cutucar" na galera (`actions/galera.ts`: push "Fulano cutucou você" com `vibrate`, kind `poke`, uma por minuto por pessoa; `PokeRow` em `galera/poke-button.tsx`; VAPID gerado no `playwright.config.ts`), com testes e e2e
+- [x] "Dedar" na galera (`actions/galera.ts`: push "Fulano enfiou o dedo no seu cu" com `vibrate`, kind `poke`, uma por minuto por pessoa; `PokeRow` em `galera/poke-button.tsx`; VAPID gerado no `playwright.config.ts`), com testes e e2e
 - [x] Correção: gênero e testosterona da galera quebram linha em vez de sumir atrás do "…" (`formatInteger` com ponto de milhar, `wrap-anywhere`), com e2e
 - [x] Áudio em post (migration 0011): `lib/audio-storage.ts` (sniff WebM/M4A/Ogg/MP3/WAV, 20 MB), rota `/api/audios` com Range (`lib/range.ts`, compartilhado com vídeo), gravador com MediaRecorder + medidor (`feed/novo/audio-recorder.tsx`), player próprio estilo mensagem de voz (`components/posts/audio-player.tsx`), duração e forma de onda (`lib/audio.ts`) guardadas no post; testes e e2e com microfone falso
+- [x] "Cutucar" virou "Dedar" (07/09/2026): botão, mensagens e o push "Fulano enfiou o dedo no seu cu"; mecânica igual
 - [ ] Testar gravação de áudio num iPhone de verdade (Safari grava AAC em MP4) e conferir se o WebM/Opus gravado no Android toca lá
 
 ## Definição de pronto (qualquer tarefa)

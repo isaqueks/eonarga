@@ -191,9 +191,13 @@ describe("push", () => {
     expect(sw.fetch).not.toHaveBeenCalled();
   });
 
-  it("repassa o padrão de vibração da cutucada e ignora padrão malformado", async () => {
+  it("repassa o padrão de vibração da dedada e ignora padrão malformado", async () => {
     const sw = boot();
-    await push(sw, { body: "Ana cutucou você", tag: "poke:ana", vibrate: [300, 100, 300] });
+    await push(sw, {
+      body: "Ana enfiou o dedo no seu cu",
+      tag: "poke:ana",
+      vibrate: [300, 100, 300],
+    });
     await push(sw, { body: "sem vibrar" });
     await push(sw, { body: "lixo", vibrate: ["forte", -1] });
     await push(sw, { body: "longo demais", vibrate: [100, 100000] });

@@ -115,7 +115,7 @@ beforeEach(async () => {
 });
 
 describe("pokeUser", () => {
-  it("cutuca uma pessoa só: push com vibração, foto de quem cutucou e registro no histórico", async () => {
+  it("deda uma pessoa só: push com vibração, foto de quem dedou e registro no histórico", async () => {
     await subscribe("bia-celular", BIA.id);
     await subscribe("bia-tablet", BIA.id);
     await subscribe("cadu-celular", CADU.id);
@@ -129,7 +129,7 @@ describe("pokeUser", () => {
     ]);
     expect(lastPayload()).toEqual({
       title: "E o narga?",
-      body: "Ana cutucou você",
+      body: "Ana enfiou o dedo no seu cu",
       url: "/galera",
       tag: `poke:${ANA.id}`,
       icon: "/api/uploads/abcdefghijklmnop?v=thumb",
@@ -140,7 +140,7 @@ describe("pokeUser", () => {
     expect(log).toHaveLength(1);
     expect(log[0]).toMatchObject({
       kind: "poke",
-      body: "Ana cutucou você",
+      body: "Ana enfiou o dedo no seu cu",
       url: "/galera",
       createdBy: ANA.id,
       targetUserId: BIA.id,
@@ -148,20 +148,20 @@ describe("pokeUser", () => {
     });
   });
 
-  it("quem não ligou notificação é cutucado no vazio, mas fica no histórico", async () => {
+  it("quem não ligou notificação é dedado no vazio, mas fica no histórico", async () => {
     expect(await actions.pokeUser(BIA.id)).toEqual({ ok: true, sent: 0, recipients: 0 });
     expect(webpush.sendNotification).not.toHaveBeenCalled();
     expect(await db.select().from(schema.notifications)).toHaveLength(1);
   });
 
-  it("uma cutucada por minuto, seja lá quem for o alvo", async () => {
+  it("uma dedada por minuto, seja lá quem for o alvo", async () => {
     await subscribe("bia-celular", BIA.id);
     await subscribe("cadu-celular", CADU.id);
 
     expect(await actions.pokeUser(BIA.id)).toMatchObject({ ok: true });
     expect(await actions.pokeUser(CADU.id)).toEqual({
       ok: false,
-      error: "Calma. Uma cutucada por minuto.",
+      error: "Calma. Uma dedada por minuto.",
     });
     expect(await actions.pokeUser(BIA.id)).toMatchObject({ ok: false });
     expect(pushedTo()).toEqual(["https://push.example.com/bia-celular"]);
@@ -172,7 +172,7 @@ describe("pokeUser", () => {
     expect(await actions.pokeUser(BIA.id)).toMatchObject({ ok: true, recipients: 1 });
   });
 
-  it("cutucar quem não existe ou está desativado não gasta a vez", async () => {
+  it("dedar quem não existe ou está desativado não gasta a vez", async () => {
     await subscribe("bia-celular", BIA.id);
 
     expect(await actions.pokeUser("ninguem")).toEqual({
@@ -185,10 +185,10 @@ describe("pokeUser", () => {
     expect(await actions.pokeUser(BIA.id)).toMatchObject({ ok: true, recipients: 1 });
   });
 
-  it("se cutucar sozinho não vale", async () => {
+  it("se dedar sozinho não vale", async () => {
     expect(await actions.pokeUser(ANA.id)).toEqual({
       ok: false,
-      error: "Se cutucar sozinho não vale.",
+      error: "Se dedar sozinho não vale.",
     });
     expect(webpush.sendNotification).not.toHaveBeenCalled();
   });
@@ -202,7 +202,7 @@ describe("pokeUser", () => {
     expect(await db.select().from(schema.notifications)).toEqual([]);
   });
 
-  it("sem sessão não cutuca", async () => {
+  it("sem sessão não deda", async () => {
     state.user = null;
     await expect(actions.pokeUser(BIA.id)).rejects.toThrow();
   });

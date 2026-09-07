@@ -248,7 +248,7 @@ export const pushSubscriptions = sqliteTable(
 // "comment" = alguém comentou no seu post (docs/08 #34); vai só pra quem postou.
 // "mention" = alguém te citou com @Nome: (docs/08 #41); vai só pra quem foi citado.
 // "like" = alguém curtiu seu comentário (docs/08 #44); vai só pra quem escreveu.
-// "poke" = cutucada na galera (docs/08 #45); vai só pra quem foi cutucado.
+// "poke" = dedada na galera (docs/08 #45); vai só pra quem foi dedado.
 export const NOTIFICATION_KINDS = ["call", "admin", "comment", "mention", "like", "poke"] as const;
 
 // Histórico do que foi disparado: "Chamar galera pra cá", avisos do admin e comentários em post.

@@ -13,7 +13,7 @@ import { E2E_ADMIN } from "./e2e/fixtures";
 // está ocupado (EBUSY) e a limpeza é simplesmente ignorada.
 const E2E_DB = path.resolve("data/e2e.db");
 
-// Chaves VAPID só do e2e: ligam "Chamar galera" e "Cutucar" sem depender do .env da
+// Chaves VAPID só do e2e: ligam "Chamar galera" e "Dedar" sem depender do .env da
 // máquina. O banco do e2e não tem assinatura, então nenhum push sai de verdade.
 const vapid = webpush.generateVAPIDKeys();
 for (const suffix of ["", "-wal", "-shm"]) {

@@ -260,15 +260,15 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await expect(page.getByText("Ana Teste")).toBeVisible();
   await shot(page, "14b-galera");
 
-  // Cutucar: a Ana não tem assinatura de push, então o aviso é esse; a segunda cutucada
+  // Dedar: a Ana não tem assinatura de push, então o aviso é esse; a segunda dedada
   // dentro do minuto bate no rate limit.
-  await page.getByRole("button", { name: "Cutucar Ana Teste", exact: true }).click();
+  await page.getByRole("button", { name: "Dedar Ana Teste", exact: true }).click();
   await expect(page.getByText("Ana Teste não ligou notificação.")).toBeVisible({
     timeout: 60_000,
   });
-  await page.getByRole("button", { name: "Cutucar Ana Teste", exact: true }).click();
-  await expect(page.getByText("Calma. Uma cutucada por minuto.")).toBeVisible();
-  await shot(page, "14c-galera-cutucar");
+  await page.getByRole("button", { name: "Dedar Ana Teste", exact: true }).click();
+  await expect(page.getByText("Calma. Uma dedada por minuto.")).toBeVisible();
+  await shot(page, "14c-galera-dedar");
 
   // Foto de perfil: envia um PNG gerado na hora
   await page.goto("/perfil");

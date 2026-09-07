@@ -32,7 +32,7 @@ export interface PushPayload {
    */
   icon?: string;
   /**
-   * Padrão de vibração em ms, alternando vibra e pausa (`[300, 100, 300]`). Só a cutucada
+   * Padrão de vibração em ms, alternando vibra e pausa (`[300, 100, 300]`). Só a dedada
    * manda; o resto fica com o padrão do celular. iPhone e Firefox ignoram.
    */
   vibrate?: number[];

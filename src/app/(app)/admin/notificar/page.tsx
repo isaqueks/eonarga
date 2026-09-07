@@ -73,7 +73,7 @@ export default async function AdminNotificarPage() {
                           : item.kind === "like"
                             ? "curtida"
                             : item.kind === "poke"
-                              ? "cutucada"
+                              ? "dedada"
                               : "aviso"}
                   </span>
                   <span className="text-sm font-medium">{item.title}</span>
