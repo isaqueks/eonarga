@@ -171,8 +171,8 @@ function EventText({ event }: { event: LineEvent }) {
     case "post_reaction":
       return (
         <>
-          <Who name={event.user.name} /> reagiu <span aria-hidden>{event.emoji}</span> no post de{" "}
-          {event.postAuthor}
+          <Who name={event.user.name} /> reagiu <span aria-hidden>{event.emoji}</span> no{" "}
+          {event.flop ? "flop" : "post"} de {event.postAuthor}
           {event.place ? (
             <>
               {" "}

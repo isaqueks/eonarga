@@ -763,6 +763,33 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await shot(page, "22d-feed-com-audio");
   await player.getByRole("button", { name: "Pausar" }).click();
 
+  // --- Flop: 6 h sem ninguém vira aviso do app no feed ----------------------
+  // A varredura de verdade roda a cada 5 min no servidor; aqui o admin chama a rota
+  // adiantando o relógio em 7 h. Os cinco posts são do Admin e só têm reação e
+  // comentário dele mesmo, o que não salva ninguém: flopam todos.
+  const daquiA7h = new Date(Date.now() + 7 * 3_600_000).toISOString();
+  const varredura = await page.request.post("/api/admin/flop-sweep", { data: { now: daquiA7h } });
+  expect(varredura.status()).toBe(200);
+  const { flopped } = (await varredura.json()) as { flopped: { postId: string }[] };
+  expect(flopped).toHaveLength(5);
+
+  await page.reload();
+  const avisos = page.locator("article").filter({ hasText: "O post de Admin flopou 200%" });
+  await expect(avisos).toHaveCount(5);
+  const avisoTexto = avisos.filter({ hasText: "Tô aqui e tem narga" });
+  await expect(avisoTexto.getByText("E o narga?", { exact: true })).toBeVisible();
+  await expect(avisoTexto.getByRole("link", { name: /Tô aqui e tem narga/ })).toHaveAttribute(
+    "href",
+    /^\/feed#post-/,
+  );
+  // O aviso não tem a linha "de onde".
+  await expect(avisoTexto.getByRole("link", { name: /Sebo do João/ })).toHaveCount(0);
+  await shot(page, "22e-feed-flop");
+
+  // Segunda passada não flopa ninguém de novo.
+  const deNovo = await page.request.post("/api/admin/flop-sweep", { data: { now: daquiA7h } });
+  expect(((await deNovo.json()) as { flopped: unknown[] }).flopped).toEqual([]);
+
   // --- Apagar o post da foto pelo menu "⋯" ----------------------------------
   const apagar = page.getByRole("menuitem", { name: /Apagar/ });
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -779,8 +806,9 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await expect(page.getByRole("img", { name: "Foto de Admin" })).toHaveCount(0, {
     timeout: 30_000,
   });
-  // O post de texto continua lá.
-  await expect(page.getByText("Tô aqui e tem narga")).toBeVisible();
+  // O post de texto continua lá; o aviso de flop da foto foi junto com ela.
+  await expect(page.getByText("Tô aqui e tem narga")).toHaveCount(2);
+  await expect(avisos).toHaveCount(4);
 });
 
 test("página offline é pública e tem a copy do cachorro", async ({ page }) => {

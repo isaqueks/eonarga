@@ -63,6 +63,8 @@ export type FeedEvent =
       postId: string;
       /** Nome de quem postou. */
       postAuthor: string;
+      /** A reação foi num aviso de flop ("reagiu no flop de Fulano"). */
+      flop: boolean;
     }
   /** Post do feed: foto e/ou texto, com quem postou e de onde (docs/01 — Feed). */
   | { kind: "post"; at: string; user: PersonRef; post: PostItem };
@@ -225,6 +227,7 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
           emoji: postReactions.emoji,
           postId: posts.id,
           authorName: postAuthor.name,
+          flopOfPostId: posts.flopOfPostId,
         })
         .from(postReactions)
         .innerJoin(reactor, eq(reactor.id, postReactions.userId))
@@ -302,6 +305,7 @@ export async function listFeed(opts: ListFeedOptions = {}): Promise<FeedEvent[]>
       emoji: row.emoji,
       postId: row.postId,
       postAuthor: row.authorName,
+      flop: row.flopOfPostId !== null,
     })),
     ...callRows.map((row): FeedEvent => ({
       kind: "call",

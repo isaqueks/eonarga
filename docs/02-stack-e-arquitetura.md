@@ -146,7 +146,7 @@ O VPS já hospeda outros projetos e tem um **Caddy do sistema** nas portas 80/44
 - Um site no `/etc/caddy/Caddyfile` do sistema, no mesmo padrão dos outros sites atrás da Cloudflare: bloco `http://eonarga.com.br` e bloco `https://eonarga.com.br` com `tls internal` (Cloudflare no modo Flexible/Full não-estrito), ambos com `reverse_proxy 127.0.0.1:3010`.
 - Volume `eonarga_app_data` com o SQLite. Backup: `docker compose -f compose.prod.yml exec app tar cz -C /app/data . > backup.tgz`.
 
-Atualizar: `docker build -t eonarga:X.Y.Z .` local → enviar → no VPS `EONARGA_TAG=X.Y.Z docker compose -f compose.prod.yml up -d`. Migrations rodam no start.
+Atualizar: `docker build -t eonarga:X.Y.Z .` local → enviar → no VPS `EONARGA_TAG=X.Y.Z docker compose -f compose.prod.yml up -d`. Migrations rodam no start (`src/instrumentation.ts`), que também liga a varredura de flop (`src/lib/flop.ts`, a cada 5 min no mesmo processo — sem cron fora do container).
 
 ### Alternativa: VPS só nosso (compose.yml com Caddy próprio)
 

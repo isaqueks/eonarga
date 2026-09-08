@@ -1,5 +1,13 @@
 import { relations, sql } from "drizzle-orm";
-import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  type AnySQLiteColumn,
+} from "drizzle-orm/sqlite-core";
 
 // Datas em ISO 8601 UTC, geradas pelo SQLite. updated_at é responsabilidade do app nos UPDATEs.
 const nowIso = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
@@ -249,7 +257,16 @@ export const pushSubscriptions = sqliteTable(
 // "mention" = alguém te citou com @Nome: (docs/08 #41); vai só pra quem foi citado.
 // "like" = alguém curtiu seu comentário (docs/08 #44); vai só pra quem escreveu.
 // "poke" = dedada na galera (docs/08 #45); vai só pra quem foi dedado.
-export const NOTIFICATION_KINDS = ["call", "admin", "comment", "mention", "like", "poke"] as const;
+// "flop" = "Seu post flopou 200%" (docs/08 #50); vai só pra quem postou.
+export const NOTIFICATION_KINDS = [
+  "call",
+  "admin",
+  "comment",
+  "mention",
+  "like",
+  "poke",
+  "flop",
+] as const;
 
 // Histórico do que foi disparado: "Chamar galera pra cá", avisos do admin e comentários em post.
 export const notifications = sqliteTable(
@@ -313,6 +330,14 @@ export const posts = sqliteTable(
     // Post importado do Instagram (docs/08 #37): o link canônico e o perfil de origem.
     sourceUrl: text("source_url"),
     sourceAuthor: text("source_author"),
+    // Flop (docs/08 #50). No post original, `flopped_at` marca que o aviso já saiu (e não
+    // sai de novo, mesmo que o aviso seja apagado). No aviso ("O post de Fulano flopou
+    // 200%"), `flop_of_post_id` aponta pro post que flopou; o `user_id` é o do autor
+    // do original, e o aviso some junto com ele.
+    flopOfPostId: text("flop_of_post_id").references((): AnySQLiteColumn => posts.id, {
+      onDelete: "cascade",
+    }),
+    floppedAt: text("flopped_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -1,4 +1,5 @@
 import { asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { REACTION_EMOJIS } from "@/lib/constants";
 import { db } from "@/lib/db/client";
@@ -12,6 +13,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { loadCommentLikes } from "@/lib/queries/comment-likes";
+import { previewText } from "@/lib/posts";
 import type { PersonRef } from "@/lib/queries/places";
 import type { ReactionSummary } from "@/lib/queries/reviews";
 import { isAudioExt, type AudioExt } from "@/lib/audio-storage";
@@ -58,6 +60,24 @@ export interface PostPlaceRef {
   emoji: string;
 }
 
+/**
+ * O aviso "O post de Fulano flopou 200%" (docs/08 #50) aponta pro post que flopou: o
+ * card mostra uma prévia dele (autor, começo do texto, miniatura) com link pra âncora.
+ */
+export interface PostFlopRef {
+  postId: string;
+  authorName: string;
+  /** Começo do texto do post que flopou, ou null se ele era só mídia. */
+  excerpt: string | null;
+  /** Miniatura da foto (ou da capa do vídeo), quando tinha. */
+  thumbUrl: string | null;
+  /** O que o post que flopou tinha além de texto. */
+  media: "photo" | "video" | "audio" | null;
+}
+
+/** Quanto do texto do post que flopou cabe na prévia do aviso. */
+export const FLOP_EXCERPT_MAX = 120;
+
 /** Um comentário no post, pronto pro card. */
 export interface PostCommentItem {
   id: string;
@@ -83,6 +103,8 @@ export interface PostItem {
   address: string | null;
   /** Post importado do Instagram: link e perfil de origem. */
   source: { url: string; author: string | null } | null;
+  /** Aviso de flop: qual post flopou. Null num post normal. */
+  flop: PostFlopRef | null;
   author: PersonRef;
   createdAt: string;
   /** Autor do post ou admin (docs/05). */
@@ -107,9 +129,13 @@ export interface ListPostsOptions {
   before?: string;
 }
 
+// O post que flopou (e quem postou), pro aviso de flop desenhar a prévia dele.
+const flopOf = alias(posts, "flop_of");
+const flopOfAuthor = alias(users, "flop_of_author");
+
 /**
- * Uma query só, com join em users e left join em places/categories — o card do feed
- * precisa de tudo isso e nada mais. Sem N+1.
+ * Uma query só, com join em users e left join em places/categories (e no post que
+ * flopou, quando é um aviso) — o card do feed precisa de tudo isso e nada mais. Sem N+1.
  *
  * Post de lugar arquivado continua aparecendo: o post é da pessoa, não do lugar (o
  * `place_id` só vira null se o lugar for apagado de verdade).
@@ -133,6 +159,12 @@ const columns = {
   address: posts.address,
   sourceUrl: posts.sourceUrl,
   sourceAuthor: posts.sourceAuthor,
+  flopOfPostId: posts.flopOfPostId,
+  flopOfBody: flopOf.body,
+  flopOfPhotoId: flopOf.photoId,
+  flopOfVideoId: flopOf.videoId,
+  flopOfAudioId: flopOf.audioId,
+  flopOfAuthorName: flopOfAuthor.name,
   createdAt: posts.createdAt,
   placeId: places.id,
   placeSlug: places.slug,
@@ -162,6 +194,12 @@ type PostRow = {
   address: string | null;
   sourceUrl: string | null;
   sourceAuthor: string | null;
+  flopOfPostId: string | null;
+  flopOfBody: string | null;
+  flopOfPhotoId: string | null;
+  flopOfVideoId: string | null;
+  flopOfAudioId: string | null;
+  flopOfAuthorName: string | null;
   createdAt: string;
   placeId: string | null;
   placeSlug: string | null;
@@ -181,6 +219,24 @@ function parseStoredPeaks(raw: string | null): number[] | null {
   } catch {
     return null;
   }
+}
+
+/** A prévia do post que flopou; o aviso sem original (não deveria existir) fica genérico. */
+function toFlop(row: PostRow): PostFlopRef | null {
+  if (!row.flopOfPostId) return null;
+  return {
+    postId: row.flopOfPostId,
+    authorName: row.flopOfAuthorName ?? row.authorName,
+    excerpt: row.flopOfBody ? previewText(row.flopOfBody, FLOP_EXCERPT_MAX).text : null,
+    thumbUrl: row.flopOfPhotoId ? `/api/uploads/${row.flopOfPhotoId}?v=thumb` : null,
+    media: row.flopOfVideoId
+      ? "video"
+      : row.flopOfPhotoId
+        ? "photo"
+        : row.flopOfAudioId
+          ? "audio"
+          : null,
+  };
 }
 
 const EMOJI_ORDER = new Map<string, number>(REACTION_EMOJIS.map((emoji, i) => [emoji, i]));
@@ -330,6 +386,7 @@ function toItem(
     lng: row.lng,
     address: row.address,
     source: row.sourceUrl ? { url: row.sourceUrl, author: row.sourceAuthor } : null,
+    flop: toFlop(row),
     author: { id: row.authorId, name: row.authorName, avatarId: row.authorAvatarId },
     createdAt: row.createdAt,
     canDelete: viewer !== null && (viewer.role === "admin" || viewer.id === row.authorId),
@@ -367,6 +424,8 @@ export async function listPosts(
     .innerJoin(users, eq(users.id, posts.userId))
     .leftJoin(places, eq(places.id, posts.placeId))
     .leftJoin(categories, eq(categories.id, places.categoryId))
+    .leftJoin(flopOf, eq(flopOf.id, posts.flopOfPostId))
+    .leftJoin(flopOfAuthor, eq(flopOfAuthor.id, flopOf.userId))
     .where(before ? lt(posts.createdAt, before) : undefined)
     // Dois posts no mesmo milissegundo empatam no createdAt; o id desempata.
     .orderBy(desc(posts.createdAt), desc(posts.id))
@@ -385,6 +444,8 @@ export async function getPost(id: string, viewer: PostViewer | null): Promise<Po
     .innerJoin(users, eq(users.id, posts.userId))
     .leftJoin(places, eq(places.id, posts.placeId))
     .leftJoin(categories, eq(categories.id, places.categoryId))
+    .leftJoin(flopOf, eq(flopOf.id, posts.flopOfPostId))
+    .leftJoin(flopOfAuthor, eq(flopOfAuthor.id, flopOf.userId))
     .where(eq(posts.id, id))
     .limit(1)) as PostRow[];
 

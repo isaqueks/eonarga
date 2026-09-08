@@ -157,9 +157,11 @@ Post do feed (docs/01 — Feed): foto, vídeo ou áudio e/ou texto, sempre com q
 | lat, lng                  | real                 | sempre gravadas, mesmo com `place_id`                                        |
 | address                   | text null            | do lugar, ou do reverse geocoding                                            |
 | source_url, source_author | text null            | post importado do Instagram: link canônico e perfil                          |
+| flop_of_post_id           | fk posts (cascade)   | no aviso "O post de Fulano flopou 200%": o post que flopou (migration 0012)  |
+| flopped_at                | text null            | no post que flopou: quando o aviso saiu (nunca sai de novo)                  |
 | created_at, updated_at    | text                 |                                                                              |
 
-Índices em `created_at` (a ordem do feed) e `user_id`. As regras "tem `body` **ou** `photo_id`" e "com `place_id`, `lat/lng` são os do lugar" ficam na action (`src/actions/posts.ts`), não no banco. A foto usa os mesmos arquivos do storage das outras (`{id}.webp` / `{id}.thumb.webp`) e é apagada junto com a linha.
+Índices em `created_at` (a ordem do feed) e `user_id`. As regras "tem `body` **ou** `photo_id`" e "com `place_id`, `lat/lng` são os do lugar" ficam na action (`src/actions/posts.ts`), não no banco. O aviso de flop (docs/08 #50) é uma linha desta tabela assinada pelo autor do post que flopou, com `flop_of_post_id` apontando pra ele e o mesmo "de onde"; o card do feed reconhece pela coluna e desenha como fala do app. A foto usa os mesmos arquivos do storage das outras (`{id}.webp` / `{id}.thumb.webp`) e é apagada junto com a linha.
 
 ### post_reactions e post_comments
 

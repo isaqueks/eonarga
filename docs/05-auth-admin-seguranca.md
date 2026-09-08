@@ -86,6 +86,12 @@ Checagem sempre no servidor, dentro da server action, via `requireUser()` / `req
 - User-agent honesto (`EONargaBot/1.0`): o Instagram entrega HTML renderizado pra quem não é navegador. Se mudarem isso, a importação quebra e o caminho manual continua.
 - TikTok: a página do vídeo (`tiktok.com/@perfil/video/<id>`) também vem renderizada pro nosso user-agent; link curto é seguido na mão, hop a hop, só pra hosts `*.tiktok.com` e no máximo 3 vezes. O vídeo e a capa só são baixados de `*.tiktok.com`, `*.tiktokcdn.com`, `*.tiktokcdn-us.com` e `*.tiktokv.com`, com os cookies que a própria página mandou e `Referer` do TikTok (sem isso a CDN responde 403). Mesmos tetos e prazos do Instagram (`src/lib/remote-media.ts`).
 
+## Flop de post (docs/08 #50)
+
+- A varredura roda dentro do processo do servidor, a cada 5 min (`src/lib/flop.ts`, ligada no `instrumentation.ts`; `EONARGA_SKIP_FLOP_SWEEP=1` desliga). Não existe endpoint público pra ela.
+- `POST /api/admin/flop-sweep` roda uma passada na hora: só com sessão de admin e mesma origem. Fora de produção aceita `{ "now": "<ISO>" }` pra adiantar o relógio — é como o e2e flopa um post recém-criado. Em produção o campo é ignorado.
+- O aviso é gravado como post do autor do original, então apagar segue as regras de post (quem postou ou admin); apagar o original leva o aviso junto (cascade).
+
 ## Vídeo em post (docs/08 #39)
 
 - Tipo pelos magic bytes (`ftyp` com marca conhecida = MP4/MOV; EBML com doctype `webm`), nunca pelo `Content-Type`. Matroska, HEIC e o resto caem fora.

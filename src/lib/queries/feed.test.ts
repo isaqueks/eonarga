@@ -436,4 +436,95 @@ describe("listFeed", () => {
 
     expect(new Set(keys).size).toBe(keys.length);
   });
+
+  it('aviso de flop traz a prévia do post que flopou; reação nele é "no flop de"', async () => {
+    const { eq, inArray } = await import("drizzle-orm");
+    const T_FLOP_FOTO = "2026-08-14T10:00:00.000Z";
+    const T_FLOP_SEBO = "2026-08-14T11:00:00.000Z";
+    const T_REACAO_FLOP = "2026-08-15T10:00:00.000Z";
+    await db.insert(schema.posts).values([
+      {
+        id: "flop-foto",
+        userId: BIA.id,
+        body: "O post de Bia flopou 200%",
+        lat: -27.5975,
+        lng: -48.55,
+        address: "Rua Felipe Schmidt, 123 - Centro",
+        flopOfPostId: "post-foto",
+        createdAt: T_FLOP_FOTO,
+        updatedAt: T_FLOP_FOTO,
+      },
+      {
+        id: "flop-sebo",
+        userId: ANA.id,
+        body: "O post de Ana flopou 200%",
+        placeId: SEBO,
+        lat: -27.59,
+        lng: -48.54,
+        flopOfPostId: "post-sebo",
+        createdAt: T_FLOP_SEBO,
+        updatedAt: T_FLOP_SEBO,
+      },
+    ]);
+    await db
+      .insert(schema.postReactions)
+      .values({ postId: "flop-foto", userId: ANA.id, emoji: "😂", createdAt: T_REACAO_FLOP });
+
+    try {
+      const events = await feed.listFeed();
+
+      expect(events[0]).toMatchObject({
+        kind: "post_reaction",
+        at: T_REACAO_FLOP,
+        user: { id: ANA.id, name: "Ana" },
+        postId: "flop-foto",
+        postAuthor: "Bia",
+        flop: true,
+        place: null,
+      });
+      // Só foto: sem texto pra citar, vai a miniatura e o que o post tinha.
+      expect(events[1]).toMatchObject({
+        kind: "post",
+        at: T_FLOP_SEBO,
+        post: {
+          id: "flop-sebo",
+          body: "O post de Ana flopou 200%",
+          author: { id: ANA.id, name: "Ana" },
+          flop: {
+            postId: "post-sebo",
+            authorName: "Ana",
+            excerpt: "Tô aqui e tem narga",
+            thumbUrl: null,
+            media: null,
+          },
+        },
+      });
+      expect(events[2]).toMatchObject({
+        kind: "post",
+        at: T_FLOP_FOTO,
+        post: {
+          id: "flop-foto",
+          flop: {
+            postId: "post-foto",
+            authorName: "Bia",
+            excerpt: null,
+            thumbUrl: "/api/uploads/foto123456789012?v=thumb",
+            media: "photo",
+          },
+        },
+      });
+
+      // Post normal não tem `flop`, e reação em post normal não é "no flop de".
+      const sebo = events.find((e) => e.kind === "post" && e.post.id === "post-sebo");
+      expect(sebo?.kind === "post" ? sebo.post.flop : undefined).toBeNull();
+      expect(
+        events.find((e) => e.kind === "post_reaction" && e.postId === "post-sebo"),
+      ).toMatchObject({ flop: false });
+    } finally {
+      await db.delete(schema.posts).where(inArray(schema.posts.id, ["flop-foto", "flop-sebo"]));
+      expect(await db.select().from(schema.posts).where(eq(schema.posts.id, "flop-foto"))).toEqual(
+        [],
+      );
+    }
+  });
 });

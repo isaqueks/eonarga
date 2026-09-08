@@ -1,6 +1,7 @@
 /**
  * Roda uma vez quando o servidor Next sobe (dev, start e no container):
- * aplica migrations e faz o seed idempotente (categorias + primeiro admin).
+ * aplica migrations, faz o seed idempotente (categorias + primeiro admin) e liga a
+ * varredura de flop.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -17,5 +18,11 @@ export async function register() {
   }
   if (result.admin.created) {
     console.log(`[eonarga] admin criado: ${result.admin.email}`);
+  }
+
+  // Varredura de flop (docs/08 #50): a cada 5 min, no próprio processo do servidor.
+  if (process.env.EONARGA_SKIP_FLOP_SWEEP !== "1") {
+    const { startFlopSweeper } = await import("./lib/flop");
+    startFlopSweeper();
   }
 }

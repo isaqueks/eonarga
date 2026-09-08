@@ -74,7 +74,9 @@ export default async function AdminNotificarPage() {
                             ? "curtida"
                             : item.kind === "poke"
                               ? "dedada"
-                              : "aviso"}
+                              : item.kind === "flop"
+                                ? "flop"
+                                : "aviso"}
                   </span>
                   <span className="text-sm font-medium">{item.title}</span>
                 </div>
