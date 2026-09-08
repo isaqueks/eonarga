@@ -173,6 +173,14 @@ async function detect(): Promise<PushState> {
 }
 
 /**
+ * A conferência com o servidor sem UI nenhuma, pro `PushSync` do layout rodar em
+ * qualquer tela. Nunca lança: sem assinatura ou fora de produção não faz nada.
+ */
+export async function syncPushSubscription(): Promise<PushState> {
+  return detect().catch((): PushState => "off");
+}
+
+/**
  * Liga e desliga a notificação neste aparelho. Serve o toggle do perfil e o
  * lembrete do feed — os dois fazem exatamente o mesmo fluxo.
  */

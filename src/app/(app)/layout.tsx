@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
+import { PushSync } from "@/components/pwa/push-sync";
 import { requireUser } from "@/lib/auth/guards";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       </main>
 
       <BottomNav />
+      <PushSync />
     </div>
   );
 }
