@@ -87,7 +87,7 @@ async function detect(): Promise<PushState> {
 
 /**
  * Liga e desliga a notificação neste aparelho. Serve o toggle do perfil e o
- * convite do ranking — os dois fazem exatamente o mesmo fluxo.
+ * lembrete do feed — os dois fazem exatamente o mesmo fluxo.
  */
 export function usePush() {
   const [state, setState] = useState<PushState>("loading");

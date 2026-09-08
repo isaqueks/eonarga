@@ -187,7 +187,7 @@ Progresso visível ("1 de 3"). Voltar preserva o que foi digitado. Se o link nã
 
 ### Feed
 
-Ícone de atividade no header (`/feed`). Do topo pra baixo: título "Novidades", botão primário largo **"📸 Postar"** e a timeline.
+Ícone de atividade no header (`/feed`). Do topo pra baixo: título "Novidades", o botão "Instalar aplicativo" (celular sem o PWA), uma linha discreta "🔕 Notificações desativadas. Ativar" quando o push está desligado neste aparelho (some ao ligar; quem bloqueou no navegador lê como liberar), botão primário largo **"📸 Postar"** e a timeline.
 
 - **Post** (card): avatar + nome, "há 5 min", linha "📍 no **Sebo do João**" (link pra ficha) ou "📍 Rua Felipe Schmidt, 123 - Centro" (link pro Maps, aba nova); a foto em largura total, na proporção original, e o texto embaixo respeitando as quebras de linha. Tocar na foto abre em tela cheia. Menu "⋯" com "Apagar" (com confirmação) pra quem postou e pro admin.
 - **Áudio** (no card do post): player próprio no estilo mensagem de voz, sem o `<audio controls>` do navegador. Botão redondo âmbar (tocar/pausar, com spinner enquanto carrega), forma de onda de 64 barras que vai pintando de âmbar conforme toca (barras iguais quando o arquivo não trouxe desenho), tempo embaixo (a duração parado, o decorrido tocando) e um botão "1×" que cicla 1× → 1,5× → 2×. Tocar na onda busca no tempo; com teclado, setas andam 5 s. Erro de formato vira "Não deu pra tocar esse áudio aqui." no lugar do tempo.

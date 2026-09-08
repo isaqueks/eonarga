@@ -151,6 +151,7 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Áudio em post (migration 0011): `lib/audio-storage.ts` (sniff WebM/M4A/Ogg/MP3/WAV, 20 MB), rota `/api/audios` com Range (`lib/range.ts`, compartilhado com vídeo), gravador com MediaRecorder + medidor (`feed/novo/audio-recorder.tsx`), player próprio estilo mensagem de voz (`components/posts/audio-player.tsx`), duração e forma de onda (`lib/audio.ts`) guardadas no post; testes e e2e com microfone falso
 - [x] "Cutucar" virou "Dedar" (07/09/2026): botão, mensagens e o push "Fulano enfiou o dedo no seu cu"; mecânica igual. O botão aparece no próprio card também, só pra levar o "Se dedar sozinho não vale."
 - [x] Importar do TikTok (`lib/tiktok.ts` puro com teste; `actions/tiktok.ts` com página + vídeo com cookies/Referer + capa; `lib/remote-media.ts` compartilhado com o Instagram; `lib/import-links.ts` decide pelo link; botão único "Importar do Instagram ou TikTok"; origem "🎵 @perfil no TikTok" no card), com testes
+- [x] Lembrete de push no feed virou uma linha discreta e permanente acima do "Postar" ("Notificações desativadas. Ativar"), pra qualquer aparelho com push desligado, não só pra quem nunca respondeu
 - [ ] Testar gravação de áudio num iPhone de verdade (Safari grava AAC em MP4) e conferir se o WebM/Opus gravado no Android toca lá
 
 ## Definição de pronto (qualquer tarefa)
