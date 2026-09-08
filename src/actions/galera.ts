@@ -67,5 +67,5 @@ export async function pokeUser(targetId: string): Promise<CallGroupState> {
     sentCount: report.sent,
   });
 
-  return { ok: true, sent: report.sent, recipients: report.recipients };
+  return { ok: true, sent: report.sent, recipients: report.recipients, devices: report.devices };
 }

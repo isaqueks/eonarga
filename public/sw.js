@@ -204,6 +204,56 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
+/**
+ * O navegador trocou a assinatura por conta própria (o FCM renova o token de vez em
+ * quando). Sem isso o banco ficaria com o endpoint velho, o próximo push levaria 410 e a
+ * linha sumiria — com o celular ainda dizendo "ligadas" (docs/08 #51). Assina de novo
+ * com a mesma chave e regrava no servidor, tirando a antiga. Sem chave (navegador que
+ * não expõe `applicationServerKey`), fica pra próxima abertura do app, que regrava.
+ */
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(resubscribe(event.oldSubscription || null, event.newSubscription || null));
+});
+
+async function resubscribe(oldSubscription, newSubscription) {
+  try {
+    let subscription = newSubscription;
+    if (!subscription) {
+      const key =
+        oldSubscription && oldSubscription.options && oldSubscription.options.applicationServerKey;
+      if (!key) return;
+      subscription = await self.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key,
+      });
+    }
+    const json = subscription.toJSON();
+    if (!json.keys || !json.keys.p256dh || !json.keys.auth) return;
+    const key = subscription.options && subscription.options.applicationServerKey;
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        endpoint: subscription.endpoint,
+        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        applicationServerKey: key ? keyToBase64Url(key) : null,
+        oldEndpoint: oldSubscription ? oldSubscription.endpoint : null,
+      }),
+    });
+  } catch {
+    // Sem rede ou sem sessão: a próxima abertura do app regrava.
+  }
+}
+
+/** Os bytes da chave VAPID em base64url, o formato que o servidor compara. */
+function keyToBase64Url(key) {
+  const bytes = new Uint8Array(key);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 // ------------------------------------------------------------------------- roteador
 
 self.addEventListener("fetch", (event) => {

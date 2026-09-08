@@ -15,12 +15,18 @@ import {
 } from "@/actions/form-state";
 import { assertAdmin, assertUser } from "@/lib/auth/guards";
 import { db } from "@/lib/db/client";
-import { notifications, places, pushSubscriptions, users } from "@/lib/db/schema";
+import { notifications, places, users } from "@/lib/db/schema";
 import { avatarIcon, isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
+import type { PushSubscriptionInput } from "@/lib/push-keys";
+import {
+  deletePushSubscription,
+  INVALID_SUBSCRIPTION,
+  upsertPushSubscription,
+  type SaveSubscriptionResult,
+} from "@/lib/push-subscriptions";
 import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit";
 
 const PUSH_OFF = "Push não está configurado no servidor.";
-const INVALID_SUBSCRIPTION = "Assinatura inválida.";
 
 /** Uma chamada por pessoa a cada 10 min, e uma por lugar a cada 5 (docs/08 #29). */
 const CALL_USER_LIMIT = { limit: 1, windowMs: 10 * 60_000 };
@@ -29,58 +35,18 @@ const CALL_PLACE_LIMIT = { limit: 1, windowMs: 5 * 60_000 };
 const CALL_TOO_SOON = "Calma. Você já chamou a galera há pouco.";
 const PLACE_TOO_SOON = "Alguém acabou de chamar pra esse lugar.";
 
-/** O endpoint é uma URL do serviço de push (FCM, Apple, Mozilla): sempre https. */
-const subscriptionSchema = z.object({
-  endpoint: z
-    .string()
-    .trim()
-    .min(1)
-    .max(1000)
-    .refine((v) => /^https:\/\//i.test(v), INVALID_SUBSCRIPTION),
-  keys: z.object({
-    p256dh: z.string().trim().min(1).max(400),
-    auth: z.string().trim().min(1).max(400),
-  }),
-});
-
-export interface PushSubscriptionInput {
-  endpoint: string;
-  keys: { p256dh: string; auth: string };
-}
-
 /**
- * Guarda (ou atualiza) a assinatura deste navegador. O endpoint é único por
- * navegador, não por pessoa: se alguém entrar com outra conta no mesmo aparelho,
- * a linha muda de dono em vez de duplicar — senão o dono antigo continuaria
- * recebendo push de um celular que não é mais dele.
+ * Guarda (ou regrava) a assinatura deste navegador — no "Ativar" e a cada abertura do
+ * app (docs/08 #51). Regras e o porquê em `src/lib/push-subscriptions.ts`. Devolve
+ * `reason: "key-changed"` (com a chave atual) quando a assinatura foi feita com outra
+ * chave VAPID: aí o cliente assina de novo.
  */
-export async function savePushSubscription(input: PushSubscriptionInput): Promise<FormState> {
+export async function savePushSubscription(
+  input: PushSubscriptionInput,
+): Promise<SaveSubscriptionResult> {
   const { user } = await assertUser();
-
-  const parsed = subscriptionSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: INVALID_SUBSCRIPTION };
-  const { endpoint, keys } = parsed.data;
-
   const userAgent = (await headers()).get("user-agent")?.slice(0, 300) ?? null;
-  const now = new Date().toISOString();
-
-  await db
-    .insert(pushSubscriptions)
-    .values({
-      id: nanoid(12),
-      userId: user.id,
-      endpoint,
-      p256dh: keys.p256dh,
-      auth: keys.auth,
-      userAgent,
-      lastSeenAt: now,
-    })
-    .onConflictDoUpdate({
-      target: pushSubscriptions.endpoint,
-      set: { userId: user.id, p256dh: keys.p256dh, auth: keys.auth, userAgent, lastSeenAt: now },
-    });
-
-  return { ok: true };
+  return upsertPushSubscription(user.id, input, userAgent);
 }
 
 /** Desliga a notificação neste aparelho. Só apaga assinatura da própria pessoa. */
@@ -90,10 +56,7 @@ export async function removePushSubscription(endpoint: string): Promise<FormStat
   const value = typeof endpoint === "string" ? endpoint.trim() : "";
   if (!value) return { ok: false, error: INVALID_SUBSCRIPTION };
 
-  await db
-    .delete(pushSubscriptions)
-    .where(and(eq(pushSubscriptions.endpoint, value), eq(pushSubscriptions.userId, user.id)));
-
+  await deletePushSubscription(user.id, value);
   return { ok: true };
 }
 
@@ -147,7 +110,7 @@ export async function callGroup(placeId: string): Promise<CallGroupState> {
 
   revalidatePath("/feed");
 
-  return { ok: true, sent: report.sent, recipients: report.recipients };
+  return { ok: true, sent: report.sent, recipients: report.recipients, devices: report.devices };
 }
 
 const ALL = "all";

@@ -129,6 +129,14 @@ base64; qualquer tropeço cai pro rosto do cachorro, sem atrasar a notificação
 `icon` e `badge` e mostra o ícone do app. Testado em `src/lib/sw.test.ts`, que carrega o
 `sw.js` num `vm` com os globais falsificados.
 
+O handler de `pushsubscriptionchange` (docs/08 #51) cobre o navegador trocando a assinatura
+por conta própria (o FCM renova o token de tempos em tempos): o worker assina de novo com a
+mesma chave (`oldSubscription.options.applicationServerKey`) e manda a nova pra
+`POST /api/push/subscribe`, com a antiga em `oldEndpoint` pra sair do banco. Sem isso, o banco
+ficava com o endpoint velho, o próximo push levava 410 e a linha sumia com o celular ainda
+dizendo "ligadas". Sem chave no evento, ou sem rede, fica pra próxima abertura do app, que
+também regrava.
+
 ### Atualização
 
 `install` **não** chama `skipWaiting()`. Quando um worker novo fica `installed` e já existe

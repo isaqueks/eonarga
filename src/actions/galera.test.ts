@@ -121,7 +121,12 @@ describe("pokeUser", () => {
     await subscribe("cadu-celular", CADU.id);
     await subscribe("ana-celular", ANA.id);
 
-    expect(await actions.pokeUser(BIA.id)).toEqual({ ok: true, sent: 2, recipients: 1 });
+    expect(await actions.pokeUser(BIA.id)).toEqual({
+      ok: true,
+      sent: 2,
+      recipients: 1,
+      devices: 2,
+    });
 
     expect(pushedTo()).toEqual([
       "https://push.example.com/bia-celular",
@@ -149,9 +154,29 @@ describe("pokeUser", () => {
   });
 
   it("quem não ligou notificação é dedado no vazio, mas fica no histórico", async () => {
-    expect(await actions.pokeUser(BIA.id)).toEqual({ ok: true, sent: 0, recipients: 0 });
+    expect(await actions.pokeUser(BIA.id)).toEqual({
+      ok: true,
+      sent: 0,
+      recipients: 0,
+      devices: 0,
+    });
     expect(webpush.sendNotification).not.toHaveBeenCalled();
     expect(await db.select().from(schema.notifications)).toHaveLength(1);
+  });
+
+  it("tinha assinatura mas o push falhou: `devices` conta, `recipients` não", async () => {
+    await subscribe("bia-celular", BIA.id);
+    webpush.sendNotification.mockRejectedValue(new Error("serviço fora"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    expect(await actions.pokeUser(BIA.id)).toEqual({
+      ok: true,
+      sent: 0,
+      recipients: 0,
+      devices: 1,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   it("uma dedada por minuto, seja lá quem for o alvo", async () => {

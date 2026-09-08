@@ -27,7 +27,11 @@ export type ImportReport = {
 export type ImportState = FormState & { report?: ImportReport };
 
 /** Retorno do "Chamar galera pra cá": quantos aparelhos e quantas pessoas foram avisadas. */
-export type CallGroupState = FormState & { sent?: number; recipients?: number };
+/**
+ * `devices` é quantas assinaturas o alvo tinha antes de tentar: separa "não ligou
+ * notificação" (0) de "tinha, mas o push falhou" (devices > 0 e recipients 0).
+ */
+export type CallGroupState = FormState & { sent?: number; recipients?: number; devices?: number };
 
 /** O mesmo, mais os erros de envio, pro relatório do aviso do admin. */
 export type NotifyState = CallGroupState & { failed?: number };

@@ -3,11 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { removePushSubscription, savePushSubscription } from "@/actions/push";
+import { sameKey, type PushSubscriptionInput } from "@/lib/push-keys";
 
 /**
  * Estado do push neste aparelho. Tudo é detectado no `useEffect` (nada disso existe
  * no servidor), então o primeiro render é sempre `"loading"` e não há divergência
  * de hidratação.
+ *
+ * "on" não é só "o navegador tem assinatura": a cada abertura a assinatura é regravada
+ * no servidor (docs/08 #51), que é o que recria a linha que sumiu, passa o dono pra
+ * conta logada e troca a assinatura se a chave do servidor mudou. Só fica "on" o que o
+ * servidor confirmou — ou o que não deu pra conferir por falta de rede.
  */
 export type PushState =
   /** Ainda checando o navegador. */
@@ -20,7 +26,7 @@ export type PushState =
   | "denied"
   /** Dá pra ativar. */
   | "off"
-  /** Assinado neste aparelho. */
+  /** Assinado neste aparelho, e o servidor sabe. */
   | "on";
 
 export const PUSH_MESSAGES = {
@@ -54,6 +60,31 @@ function urlBase64ToBytes(base64: string): ArrayBuffer {
   return buffer;
 }
 
+/** O caminho de volta: os bytes da chave com que o navegador assinou, em base64url. */
+function bytesToUrlBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Chave com que a assinatura foi feita; null quando o navegador não expõe. */
+function keyOf(subscription: PushSubscription): string | null {
+  const key = subscription.options?.applicationServerKey;
+  return key ? bytesToUrlBase64(key) : null;
+}
+
+/** O que vai pro servidor. Null quando a assinatura veio sem as chaves de cifra (não serve). */
+function toInput(subscription: PushSubscription): PushSubscriptionInput | null {
+  const keys = subscription.toJSON().keys;
+  if (!keys?.p256dh || !keys.auth) return null;
+  return {
+    endpoint: subscription.endpoint,
+    keys: { p256dh: keys.p256dh, auth: keys.auth },
+    applicationServerKey: keyOf(subscription),
+  };
+}
+
 async function fetchPublicKey(): Promise<string | null> {
   try {
     const response = await fetch("/api/push/public-key", { cache: "no-store" });
@@ -71,18 +102,74 @@ async function readyRegistration(): Promise<ServiceWorkerRegistration | null> {
   return Promise.race([navigator.serviceWorker.ready, timeout]);
 }
 
-async function currentSubscription(): Promise<PushSubscription | null> {
-  // `getRegistration` responde na hora (inclusive `undefined`); `ready` pode pendurar.
-  const registration = await navigator.serviceWorker.getRegistration();
-  if (!registration) return null;
-  return registration.pushManager.getSubscription();
+function subscribeWith(
+  registration: ServiceWorkerRegistration,
+  key: string,
+): Promise<PushSubscription> {
+  return registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToBytes(key),
+  });
+}
+
+async function unsubscribeQuietly(subscription: PushSubscription | null): Promise<void> {
+  if (!subscription) return;
+  await subscription.unsubscribe().catch(() => false);
+}
+
+/**
+ * Confere a assinatura que o navegador tem com o servidor. Regravar é o que conserta
+ * a linha que sumiu e o dono errado; chave trocada assina de novo na hora (a permissão
+ * já foi dada, não pergunta nada). Só vira "off" quando o servidor recusou de vez —
+ * aí a assinatura do navegador é desfeita, pra tela e banco baterem.
+ */
+async function syncWithServer(
+  registration: ServiceWorkerRegistration,
+  subscription: PushSubscription,
+): Promise<PushState> {
+  const input = toInput(subscription);
+  if (!input) {
+    await unsubscribeQuietly(subscription);
+    return "off";
+  }
+
+  let result: Awaited<ReturnType<typeof savePushSubscription>>;
+  try {
+    result = await savePushSubscription(input);
+  } catch {
+    // Sem rede (ou servidor fora): fica como está, a próxima abertura confere de novo.
+    return "on";
+  }
+  if (result.ok) return "on";
+
+  if (result.reason === "key-changed" && result.key) {
+    let fresh: PushSubscription | null = null;
+    try {
+      await unsubscribeQuietly(subscription);
+      fresh = await subscribeWith(registration, result.key);
+      const freshInput = toInput(fresh);
+      if (freshInput && (await savePushSubscription(freshInput)).ok) return "on";
+    } catch {
+      // cai pro "off" abaixo
+    }
+    await unsubscribeQuietly(fresh);
+    return "off";
+  }
+
+  await unsubscribeQuietly(subscription);
+  return "off";
 }
 
 async function detect(): Promise<PushState> {
   if (!supportsPush()) return "unsupported";
   if (!IS_PRODUCTION) return "dev";
   if (Notification.permission === "denied") return "denied";
-  return (await currentSubscription()) ? "on" : "off";
+  // `getRegistration` responde na hora (inclusive `undefined`); `ready` pode pendurar.
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) return "off";
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return "off";
+  return syncWithServer(registration, subscription);
 }
 
 /**
@@ -99,7 +186,7 @@ export function usePush() {
   useEffect(() => {
     alive.current = true;
     void (async () => {
-      const next = await detect().catch((): PushState => "unsupported");
+      const next = await detect().catch((): PushState => "off");
       if (!alive.current) return;
       setState(next);
       if (supportsPush()) setPermission(Notification.permission);
@@ -112,6 +199,9 @@ export function usePush() {
   const enable = useCallback(async (): Promise<boolean> => {
     setError(null);
     setPending(true);
+    // Assinatura feita nesta chamada (ou reaproveitada): se não virar linha no banco,
+    // é desfeita — assinatura sem linha é o que deixa a tela dizendo "ligadas" à toa.
+    let subscription: PushSubscription | null = null;
     try {
       const permissionResult = await Notification.requestPermission();
       setPermission(permissionResult);
@@ -133,29 +223,28 @@ export function usePush() {
         return false;
       }
 
-      // Já existe assinatura (permissão concedida numa visita anterior): reaproveita.
+      // Já existe assinatura (permissão concedida numa visita anterior): reaproveita,
+      // a não ser que tenha sido feita com outra chave do servidor — essa o serviço de
+      // push recusaria (403), então sai e entra uma nova.
       const existing = await registration.pushManager.getSubscription();
-      const subscription =
-        existing ??
-        (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToBytes(key),
-        }));
+      const existingKey = existing ? keyOf(existing) : null;
+      if (existing && existingKey && !sameKey(existingKey, key)) {
+        await unsubscribeQuietly(existing);
+        subscription = await subscribeWith(registration, key);
+      } else {
+        subscription = existing ?? (await subscribeWith(registration, key));
+      }
 
-      const keys = subscription.toJSON().keys;
-      if (!keys?.p256dh || !keys.auth) {
-        await subscription.unsubscribe().catch(() => false);
+      const input = toInput(subscription);
+      if (!input) {
+        await unsubscribeQuietly(subscription);
         setError(PUSH_MESSAGES.failed);
         return false;
       }
 
-      const saved = await savePushSubscription({
-        endpoint: subscription.endpoint,
-        keys: { p256dh: keys.p256dh, auth: keys.auth },
-      });
+      const saved = await savePushSubscription(input);
       if (!saved.ok) {
-        // Sem a linha no banco a assinatura não serve pra nada: desfaz no navegador.
-        await subscription.unsubscribe().catch(() => false);
+        await unsubscribeQuietly(subscription);
         setError(saved.error ?? PUSH_MESSAGES.failed);
         return false;
       }
@@ -163,6 +252,7 @@ export function usePush() {
       setState("on");
       return true;
     } catch {
+      await unsubscribeQuietly(subscription);
       setError(PUSH_MESSAGES.failed);
       return false;
     } finally {
@@ -174,11 +264,13 @@ export function usePush() {
     setError(null);
     setPending(true);
     try {
-      const subscription = await currentSubscription();
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = (await registration?.pushManager.getSubscription()) ?? null;
       if (subscription) {
         const endpoint = subscription.endpoint;
         await subscription.unsubscribe().catch(() => false);
-        await removePushSubscription(endpoint);
+        // Se a linha ficar (sem rede), o próximo push a encontra morta e apaga.
+        await removePushSubscription(endpoint).catch(() => null);
       }
       setState("off");
       return true;

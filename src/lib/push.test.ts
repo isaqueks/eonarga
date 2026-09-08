@@ -127,6 +127,7 @@ describe("sendPushTo", () => {
       failed: 0,
       removed: 0,
       recipients: 0,
+      devices: 0,
     });
     expect(webpush.sendNotification).not.toHaveBeenCalled();
   });
@@ -138,7 +139,7 @@ describe("sendPushTo", () => {
 
     const report = await push.sendPushTo([ANA, BIA], PAYLOAD);
 
-    expect(report).toEqual({ sent: 3, failed: 0, removed: 0, recipients: 2 });
+    expect(report).toEqual({ sent: 3, failed: 0, removed: 0, recipients: 2, devices: 3 });
     expect(webpush.sendNotification).toHaveBeenCalledTimes(3);
 
     const [subscriptionArg, body] = webpush.sendNotification.mock.calls[0];
@@ -163,6 +164,7 @@ describe("sendPushTo", () => {
       failed: 0,
       removed: 0,
       recipients: 0,
+      devices: 0,
     });
     expect(webpush.sendNotification).not.toHaveBeenCalled();
   });
@@ -179,7 +181,7 @@ describe("sendPushTo", () => {
 
     const report = await push.sendPushTo(null, PAYLOAD);
 
-    expect(report).toEqual({ sent: 1, failed: 0, removed: 1, recipients: 1 });
+    expect(report).toEqual({ sent: 1, failed: 0, removed: 1, recipients: 1, devices: 2 });
     expect(await endpoints()).toEqual(["https://push.example.com/bia-celular"]);
   });
 
@@ -189,7 +191,7 @@ describe("sendPushTo", () => {
 
     const report = await push.sendPushTo(null, PAYLOAD);
 
-    expect(report).toEqual({ sent: 0, failed: 1, removed: 0, recipients: 0 });
+    expect(report).toEqual({ sent: 0, failed: 1, removed: 0, recipients: 0, devices: 1 });
     expect(await endpoints()).toEqual(["https://push.example.com/ana-celular"]);
   });
 
@@ -213,6 +215,7 @@ describe("sendPushTo", () => {
       failed: 0,
       removed: 0,
       recipients: 0,
+      devices: 0,
     });
   });
 });

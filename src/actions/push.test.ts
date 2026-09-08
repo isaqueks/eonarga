@@ -218,13 +218,34 @@ describe("savePushSubscription", () => {
     expect(rows[0].userId).toBe(BIA.id);
   });
 
+  it("assinatura feita com outra chave VAPID é recusada, com a chave atual na resposta", async () => {
+    expect(
+      await actions.savePushSubscription({ ...sub("ana-celular"), applicationServerKey: "outra" }),
+    ).toEqual({
+      ok: false,
+      error: "A chave do servidor mudou. Assina de novo.",
+      reason: "key-changed",
+      key: "chave-publica",
+    });
+    expect(await allSubscriptions()).toHaveLength(0);
+
+    // Com a chave certa (em qualquer grafia de base64) passa.
+    expect(
+      await actions.savePushSubscription({
+        ...sub("ana-celular"),
+        applicationServerKey: "chave-publica==",
+      }),
+    ).toEqual({ ok: true });
+    expect(await allSubscriptions()).toHaveLength(1);
+  });
+
   it("recusa endpoint que não é uma URL https e exige sessão", async () => {
     expect(
       await actions.savePushSubscription({
         endpoint: "javascript:alert(1)",
         keys: { p256dh: "a", auth: "b" },
       }),
-    ).toEqual({ ok: false, error: "Assinatura inválida." });
+    ).toEqual({ ok: false, error: "Assinatura inválida.", reason: "invalid" });
 
     expect(
       await actions.savePushSubscription({
@@ -286,7 +307,7 @@ describe("callGroup", () => {
 
     const result = await actions.callGroup(SEBO);
 
-    expect(result).toEqual({ ok: true, sent: 3, recipients: 2 });
+    expect(result).toEqual({ ok: true, sent: 3, recipients: 2, devices: 3 });
     expect(pushedTo()).toEqual([
       "https://push.example.com/bia-celular",
       "https://push.example.com/bia-note",
@@ -317,7 +338,7 @@ describe("callGroup", () => {
   it("grava mesmo sem ninguém pra avisar", async () => {
     const result = await actions.callGroup(SEBO);
 
-    expect(result).toEqual({ ok: true, sent: 0, recipients: 0 });
+    expect(result).toEqual({ ok: true, sent: 0, recipients: 0, devices: 0 });
     expect(webpush.sendNotification).not.toHaveBeenCalled();
     expect(await allNotifications()).toHaveLength(1);
   });

@@ -52,9 +52,11 @@ export interface SendReport {
   removed: number;
   /** Pessoas distintas que receberam pelo menos um push. */
   recipients: number;
+  /** Assinaturas encontradas pra esses ids antes de tentar (0 = ninguém ligou). */
+  devices: number;
 }
 
-const EMPTY_REPORT: SendReport = { sent: 0, failed: 0, removed: 0, recipients: 0 };
+const EMPTY_REPORT: SendReport = { sent: 0, failed: 0, removed: 0, recipients: 0, devices: 0 };
 
 function env(name: string): string | null {
   const value = process.env[name]?.trim();
@@ -94,6 +96,15 @@ function statusOf(error: unknown): number | null {
   if (typeof error !== "object" || error === null || !("statusCode" in error)) return null;
   const status = Number((error as { statusCode: unknown }).statusCode);
   return Number.isFinite(status) ? status : null;
+}
+
+/** Só o host do endpoint: o resto é o token do aparelho, que não é pra ir em log. */
+function hostOf(endpoint: string): string {
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return "?";
+  }
 }
 
 /** Pool simples: N tarefas rodando, cada uma puxando o próximo item da fila. */
@@ -154,8 +165,18 @@ export async function sendPushTo(
       reached.add(row.userId);
     } catch (error) {
       const status = statusOf(error);
-      if (status !== null && GONE_STATUSES.has(status)) gone.push(row.endpoint);
-      else failed++;
+      // Fica no log do container: sem isso não dá pra saber por que um push não chegou
+      // (403 = chave VAPID trocada, 413 = payload grande, rede…), ver docs/08 #51.
+      if (status !== null && GONE_STATUSES.has(status)) {
+        gone.push(row.endpoint);
+        console.log(`[eonarga] push: assinatura morta (${status}) de ${row.userId}, removida`);
+      } else {
+        failed++;
+        const detail = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[eonarga] push falhou (${status ?? "sem status"}) pra ${row.userId} em ${hostOf(row.endpoint)}: ${detail}`,
+        );
+      }
     }
   });
 
@@ -165,7 +186,7 @@ export async function sendPushTo(
     removed = gone.length;
   }
 
-  return { sent, failed, removed, recipients: reached.size };
+  return { sent, failed, removed, recipients: reached.size, devices: rows.length };
 }
 
 /** Quantas pessoas e quantos aparelhos estão com notificação ligada (painel do admin). */

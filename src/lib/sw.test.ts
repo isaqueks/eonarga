@@ -26,6 +26,8 @@ interface Worker {
   listeners: Map<string, Listener>;
   fetch: Mock<FetchImpl>;
   showNotification: Mock<(title: string, options: Record<string, unknown>) => Promise<void>>;
+  /** O `pushManager.subscribe` do registro, pro `pushsubscriptionchange`. */
+  subscribe: Mock<(options: unknown) => Promise<unknown>>;
   /** O cache de uploads, em memória, indexado pela URL. */
   store: Map<string, Response>;
 }
@@ -55,6 +57,7 @@ function boot(fetchImpl: FetchImpl = unauthorized): Worker {
   const showNotification = vi.fn<
     (title: string, options: Record<string, unknown>) => Promise<void>
   >(async () => undefined);
+  const subscribe = vi.fn<(options: unknown) => Promise<unknown>>(async () => null);
   const sandbox: Record<string, unknown> = {
     location: new URL(`${ORIGIN}/sw.js?v=test`),
     addEventListener: (type: string, listener: Listener) => listeners.set(type, listener),
@@ -65,7 +68,7 @@ function boot(fetchImpl: FetchImpl = unauthorized): Worker {
       delete: async () => true,
     },
     fetch,
-    registration: { showNotification },
+    registration: { showNotification, pushManager: { subscribe } },
     clients: { claim: async () => undefined, matchAll: async () => [] },
     URL,
     Request,
@@ -84,8 +87,38 @@ function boot(fetchImpl: FetchImpl = unauthorized): Worker {
     listeners,
     fetch,
     showNotification,
+    subscribe,
     store,
   };
+}
+
+/** Dispara `pushsubscriptionchange` como o navegador faria e espera o `waitUntil`. */
+async function subscriptionChange(sw: Worker, event: Record<string, unknown>) {
+  const waited: Promise<unknown>[] = [];
+  sw.listeners.get("pushsubscriptionchange")?.({
+    ...event,
+    waitUntil: (promise: Promise<unknown>) => waited.push(promise),
+  });
+  await Promise.all(waited);
+}
+
+/** Uma `PushSubscription` de mentira: só o que o worker lê dela. */
+function fakeSubscription(endpoint: string, key: Uint8Array | null) {
+  return {
+    endpoint,
+    options: { applicationServerKey: key ? key.buffer : null },
+    toJSON: () => ({ endpoint, keys: { p256dh: `p-${endpoint}`, auth: `a-${endpoint}` } }),
+  };
+}
+
+/** Os bytes 4, 250, 251, 252: "BPr7/A==" em base64, "BPr7_A" em base64url. */
+const VAPID_BYTES = new Uint8Array([4, 250, 251, 252]);
+const OLD = "https://push.example.com/antiga";
+const NEW = "https://push.example.com/nova";
+
+function sentBody(sw: Worker): { url: string; init: RequestInit; body: Record<string, unknown> } {
+  const [url, init] = sw.fetch.mock.calls[0] as unknown as [string, RequestInit];
+  return { url, init, body: JSON.parse(String(init.body)) as Record<string, unknown> };
 }
 
 /** Dispara o evento `push` como o navegador faria e espera o `waitUntil`. */
@@ -207,5 +240,64 @@ describe("push", () => {
     expect(calls[1][1]).not.toHaveProperty("vibrate");
     expect(calls[2][1]).not.toHaveProperty("vibrate");
     expect(calls[3][1]).not.toHaveProperty("vibrate");
+  });
+});
+
+describe("pushsubscriptionchange", () => {
+  it("assina de novo com a mesma chave e regrava no servidor, tirando a antiga", async () => {
+    const sw = boot(async () => new Response("{}", { status: 200 }));
+    sw.subscribe.mockResolvedValue(fakeSubscription(NEW, VAPID_BYTES));
+
+    await subscriptionChange(sw, {
+      oldSubscription: fakeSubscription(OLD, VAPID_BYTES),
+      newSubscription: null,
+    });
+
+    expect(sw.subscribe).toHaveBeenCalledWith({
+      userVisibleOnly: true,
+      applicationServerKey: VAPID_BYTES.buffer,
+    });
+    const { url, init, body } = sentBody(sw);
+    expect(url).toBe("/api/push/subscribe");
+    expect(init).toMatchObject({ method: "POST", credentials: "same-origin" });
+    expect(body).toEqual({
+      endpoint: NEW,
+      keys: { p256dh: `p-${NEW}`, auth: `a-${NEW}` },
+      applicationServerKey: "BPr7_A",
+      oldEndpoint: OLD,
+    });
+  });
+
+  it("com a assinatura nova já no evento, só regrava", async () => {
+    const sw = boot(async () => new Response("{}", { status: 200 }));
+
+    await subscriptionChange(sw, {
+      oldSubscription: fakeSubscription(OLD, VAPID_BYTES),
+      newSubscription: fakeSubscription(NEW, VAPID_BYTES),
+    });
+
+    expect(sw.subscribe).not.toHaveBeenCalled();
+    expect(sentBody(sw).body).toMatchObject({ endpoint: NEW, oldEndpoint: OLD });
+  });
+
+  it("sem chave pra assinar de novo, deixa pra próxima abertura do app", async () => {
+    const sw = boot();
+    await subscriptionChange(sw, { oldSubscription: fakeSubscription(OLD, null) });
+    await subscriptionChange(sw, {});
+
+    expect(sw.subscribe).not.toHaveBeenCalled();
+    expect(sw.fetch).not.toHaveBeenCalled();
+  });
+
+  it("sem rede não estoura", async () => {
+    const sw = boot(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    sw.subscribe.mockResolvedValue(fakeSubscription(NEW, VAPID_BYTES));
+
+    await expect(
+      subscriptionChange(sw, { oldSubscription: fakeSubscription(OLD, VAPID_BYTES) }),
+    ).resolves.toBeUndefined();
+    expect(sw.fetch).toHaveBeenCalledTimes(1);
   });
 });

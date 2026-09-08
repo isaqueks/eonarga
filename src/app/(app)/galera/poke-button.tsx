@@ -36,10 +36,13 @@ export function PokeRow({ userId, name, enabled, children }: PokeRowProps) {
         setResult({ tone: "error", message: state.error ?? "Não rolou dedar. Tenta de novo." });
         return;
       }
+      // Tinha assinatura e mesmo assim não chegou: é falha do envio, não falta de push.
       setResult(
         (state.recipients ?? 0) > 0
           ? { tone: "ok", message: "Dedou!" }
-          : { tone: "error", message: `${name} não ligou notificação.` },
+          : (state.devices ?? 0) > 0
+            ? { tone: "error", message: `O push pro ${name} falhou. Tenta de novo.` }
+            : { tone: "error", message: `${name} não ligou notificação.` },
       );
     });
   }

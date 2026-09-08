@@ -153,6 +153,7 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Importar do TikTok (`lib/tiktok.ts` puro com teste; `actions/tiktok.ts` com página + vídeo com cookies/Referer + capa; `lib/remote-media.ts` compartilhado com o Instagram; `lib/import-links.ts` decide pelo link; botão único "Importar do Instagram ou TikTok"; origem "🎵 @perfil no TikTok" no card), com testes
 - [x] Lembrete de push no feed virou uma linha discreta e permanente acima do "Postar" ("Notificações desativadas. Ativar"), pra qualquer aparelho com push desligado, não só pra quem nunca respondeu
 - [x] Flop de post (migration 0012): `lib/flop.ts` varre a cada 5 min (ligado no `instrumentation.ts`), publica "O post de Fulano flopou 200%" como post do app (card com o cachorro e prévia do post que flopou) e manda "Seu post flopou 200%" pro autor (kind `flop`); `POST /api/admin/flop-sweep` pra rodar na hora; testes e e2e com o relógio adiantado
+- [x] Correção: "notificações ligadas" divergia do banco (docs/08 #51). A cada abertura o aparelho regrava a assinatura (`usePush` → `savePushSubscription`), "Ativar" desfaz a assinatura em qualquer falha, o SW trata `pushsubscriptionchange` via `POST /api/push/subscribe`, a chave VAPID é conferida (`lib/push-subscriptions.ts`), a dedada distingue "não ligou" de "falhou" (`devices` no `SendReport`) e as falhas de push vão pro log; testes
 - [ ] Testar gravação de áudio num iPhone de verdade (Safari grava AAC em MP4) e conferir se o WebM/Opus gravado no Android toca lá
 
 ## Definição de pronto (qualquer tarefa)

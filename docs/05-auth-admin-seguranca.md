@@ -86,6 +86,12 @@ Checagem sempre no servidor, dentro da server action, via `requireUser()` / `req
 - User-agent honesto (`EONargaBot/1.0`): o Instagram entrega HTML renderizado pra quem não é navegador. Se mudarem isso, a importação quebra e o caminho manual continua.
 - TikTok: a página do vídeo (`tiktok.com/@perfil/video/<id>`) também vem renderizada pro nosso user-agent; link curto é seguido na mão, hop a hop, só pra hosts `*.tiktok.com` e no máximo 3 vezes. O vídeo e a capa só são baixados de `*.tiktok.com`, `*.tiktokcdn.com`, `*.tiktokcdn-us.com` e `*.tiktokv.com`, com os cookies que a própria página mandou e `Referer` do TikTok (sem isso a CDN responde 403). Mesmos tetos e prazos do Instagram (`src/lib/remote-media.ts`).
 
+## Assinatura de push (docs/08 #51)
+
+- Guardar e regravar a assinatura passa por `src/lib/push-subscriptions.ts`, chamado pela server action (`savePushSubscription`, no "Ativar" e a cada abertura do app) e por `POST /api/push/subscribe`, que só o service worker usa quando o navegador troca a assinatura sozinho (`pushsubscriptionchange`). A rota exige sessão e mesma origem, 20 por minuto por pessoa, e apaga a assinatura antiga (`oldEndpoint`) só se for da mesma pessoa.
+- A chave com que o navegador assinou (`applicationServerKey`) é conferida com a `VAPID_PUBLIC_KEY` atual: assinatura de outra chave é recusada (`reason: "key-changed"`, com a chave atual na resposta) e o cliente assina de novo na hora. Trocar a chave VAPID no `.env`, portanto, não deixa ninguém pra trás: a próxima abertura resolve.
+- Push que falha vai pro log do container (`docker logs eonarga`): status HTTP, id da pessoa e o host do serviço de push — nunca o endpoint inteiro, que é o token do aparelho. Assinatura morta (404/410) também é logada quando sai.
+
 ## Flop de post (docs/08 #50)
 
 - A varredura roda dentro do processo do servidor, a cada 5 min (`src/lib/flop.ts`, ligada no `instrumentation.ts`; `EONARGA_SKIP_FLOP_SWEEP=1` desliga). Não existe endpoint público pra ela.
