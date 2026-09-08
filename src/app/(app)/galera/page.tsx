@@ -84,11 +84,7 @@ export default async function GaleraPage() {
 
               <p className="text-muted-foreground wrap-anywhere">{bio(person)}</p>
               <p className="text-foreground/80 tabular-nums">{counters(person)}</p>
-              <PokeRow
-                userId={person.id}
-                name={person.name}
-                enabled={pushEnabled && person.id !== me.id}
-              >
+              <PokeRow userId={person.id} name={person.name} enabled={pushEnabled}>
                 <p className="text-muted-foreground text-xs">
                   {lastSeen(person.lastSeenAt ?? person.lastLoginAt)}
                 </p>

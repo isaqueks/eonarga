@@ -11,7 +11,7 @@ export interface PokeRowProps {
   userId: string;
   /** Nome de quem vai ser dedado, pro rótulo acessível e pro aviso de "sem push". */
   name: string;
-  /** Falso pra você mesmo e quando o servidor está sem push: aí só o `children` aparece. */
+  /** Falso quando o servidor está sem push: aí só o `children` aparece. No próprio card o botão fica, só pra pessoa levar o "Se dedar sozinho não vale." do servidor. */
   enabled: boolean;
   /** O "visto há…" do card, que divide a linha com o botão. */
   children: ReactNode;

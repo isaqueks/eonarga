@@ -268,6 +268,9 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   });
   await page.getByRole("button", { name: "Dedar Ana Teste", exact: true }).click();
   await expect(page.getByText("Calma. Uma dedada por minuto.")).toBeVisible();
+  // No próprio card o botão existe só pra levar a resposta do servidor (e não gasta a vez).
+  await page.getByRole("button", { name: "Dedar Admin", exact: true }).click();
+  await expect(page.getByText("Se dedar sozinho não vale.")).toBeVisible();
   await shot(page, "14c-galera-dedar");
 
   // Foto de perfil: envia um PNG gerado na hora

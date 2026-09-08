@@ -209,7 +209,7 @@ Tela única (`/feed/novo`), tudo opcional menos o "onde":
 
 - Placar em cima (quatro cards) e a lista de todo mundo embaixo: foto, nome (com "(você)" e selo de admin), gênero · testosterona, contadores e "visto há…".
 - Gênero e testosterona **quebram linha** em vez de cortar com "…": admin escreve o que quiser nos dois, e "7.000.000.000.000 ng/dL" tem que aparecer inteiro (ponto de milhar, unidade grudada no número com espaço que não quebra, `wrap-anywhere` pra palavra sem espaço).
-- Botão **Dedar** na última linha do card, ao lado do "visto há…" (menos no seu), sem confirmação; o resultado aparece embaixo, na largura toda ("Dedou!", "Fulano não ligou notificação." ou "Calma. Uma dedada por minuto."). Só aparece com push configurado.
+- Botão **Dedar** na última linha do card, ao lado do "visto há…" (no seu também: dedar a si mesmo responde "Se dedar sozinho não vale."), sem confirmação; o resultado aparece embaixo, na largura toda ("Dedou!", "Fulano não ligou notificação." ou "Calma. Uma dedada por minuto."). Só aparece com push configurado.
 
 ### Perfil
 
