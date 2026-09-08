@@ -6,6 +6,7 @@ import { mapsSearchUrl } from "@/components/places/maps-buttons";
 import { ReactionBar } from "@/components/reviews/reaction-bar";
 import { UserAvatar } from "@/components/user-avatar";
 import { relativeFromNow } from "@/lib/dates";
+import { sourceProvider } from "@/lib/import-links";
 import { formatLatLng } from "@/lib/posts";
 import type { PostItem } from "@/lib/queries/posts";
 import { cn } from "@/lib/utils";
@@ -63,19 +64,7 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
         className="-mt-1"
       />
 
-      {post.source ? (
-        <p className="text-muted-foreground -mt-1 text-xs leading-5">
-          <span aria-hidden>📸 </span>
-          <a
-            href={post.source.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-foreground hover:underline"
-          >
-            {post.source.author ? `@${post.source.author} no Instagram` : "do Instagram"}
-          </a>
-        </p>
-      ) : null}
+      {post.source ? <SourceLine url={post.source.url} author={post.source.author} /> : null}
 
       {post.video ? (
         <PostVideo
@@ -114,6 +103,24 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
         className="border-border/60 border-t pt-2"
       />
     </article>
+  );
+}
+
+/** "📸 @perfil no Instagram" / "🎵 @perfil no TikTok": de onde o post importado veio. */
+function SourceLine({ url, author }: { url: string; author: string | null }) {
+  const provider = sourceProvider(url);
+  return (
+    <p className="text-muted-foreground -mt-1 text-xs leading-5">
+      <span aria-hidden>{provider.emoji} </span>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hover:text-foreground hover:underline"
+      >
+        {author ? `@${author} no ${provider.name}` : `do ${provider.name}`}
+      </a>
+    </p>
   );
 }
 

@@ -78,12 +78,13 @@ Checagem sempre no servidor, dentro da server action, via `requireUser()` / `req
 - Fotos perdem EXIF (inclusive GPS) no upload.
 - Sem analytics de terceiros. Se quiser saber uso, é `SELECT count(*)`.
 
-## Importar do Instagram (docs/08 #37)
+## Importar do Instagram (docs/08 #37) e do TikTok (docs/08 #48)
 
 - O servidor faz dois fetches: a página de embed do post (`instagram.com`, URL montada a partir do código do post, nunca da URL colada) e a imagem, cuja URL vem do HTML do Instagram e **só passa se for https na CDN deles** (`*.cdninstagram.com`, `*.fbcdn.net`) — anti-SSRF. `redirect: "manual"`, 10 s de prazo, 3 MB de HTML e 10 MB de imagem no máximo.
 - A imagem é reprocessada pelo sharp como qualquer upload (webp, sem EXIF, magic bytes conferidos).
 - Foto importada fica "no palco" em memória por 30 min, só pra quem importou; o que vence tem os arquivos apagados. 10 importações por 10 min por pessoa.
 - User-agent honesto (`EONargaBot/1.0`): o Instagram entrega HTML renderizado pra quem não é navegador. Se mudarem isso, a importação quebra e o caminho manual continua.
+- TikTok: a página do vídeo (`tiktok.com/@perfil/video/<id>`) também vem renderizada pro nosso user-agent; link curto é seguido na mão, hop a hop, só pra hosts `*.tiktok.com` e no máximo 3 vezes. O vídeo e a capa só são baixados de `*.tiktok.com`, `*.tiktokcdn.com`, `*.tiktokcdn-us.com` e `*.tiktokv.com`, com os cookies que a própria página mandou e `Referer` do TikTok (sem isso a CDN responde 403). Mesmos tetos e prazos do Instagram (`src/lib/remote-media.ts`).
 
 ## Vídeo em post (docs/08 #39)
 

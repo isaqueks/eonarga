@@ -14,12 +14,13 @@ import {
 import { EMPTY_FORM_STATE } from "@/actions/form-state";
 import { discardInstagramImport, importInstagramPost } from "@/actions/instagram";
 import { createPost } from "@/actions/posts";
+import { importTikTokPost } from "@/actions/tiktok";
 import { LocationPickerLazy } from "@/components/map/location-picker-lazy";
 import { AudioPlayer } from "@/components/posts/audio-player";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MentionTextarea } from "@/components/mentions/mention-textarea";
-import { extractInstagramLink } from "@/lib/instagram";
+import { detectImportLink, type ImportProvider } from "@/lib/import-links";
 import { formatLatLng, haversineMeters, nearestPlace, POST_BODY_MAX } from "@/lib/posts";
 import { AUDIO_MAX_BYTES, PHOTO_MAX_BYTES, VIDEO_MAX_BYTES } from "@/lib/constants";
 import type { PostPlaceOption } from "@/lib/queries/posts";
@@ -43,6 +44,7 @@ const NO_GPS = "Sem GPS. Escolhe o lugar ou marca no mapa.";
 const VIDEO_TOO_BIG = "Vídeo grande demais (máximo 60 MB). Corta ele antes.";
 const PHOTO_TOO_BIG = "Foto grande demais (máximo 10 MB).";
 const AUDIO_TOO_BIG = "Áudio grande demais (máximo 20 MB).";
+const NOT_AN_IMPORT_LINK = "Isso não parece um link do Instagram nem do TikTok.";
 const NO_RECORDER = "Esse navegador não grava áudio. Manda um da galeria.";
 
 /** O que está na prévia: um arquivo escolhido, uma gravação ou a mídia importada do Instagram. */
@@ -93,10 +95,10 @@ export function NewPostForm({
 }) {
   const [state, formAction, pending] = useActionState(createPost, EMPTY_FORM_STATE);
 
-  // O que veio pelo "Compartilhar" de outro app: link do Instagram importa sozinho
-  // (efeito mais abaixo); texto solto já nasce como texto do post.
+  // O que veio pelo "Compartilhar" de outro app: link do Instagram ou do TikTok importa
+  // sozinho (efeito mais abaixo); texto solto já nasce como texto do post.
   const sharedLink = useMemo(
-    () => (sharedText ? extractInstagramLink(sharedText) : null),
+    () => (sharedText ? detectImportLink(sharedText) : null),
     [sharedText],
   );
   const [body, setBody] = useState(() => (sharedText && !sharedLink ? sharedText.trim() : ""));
@@ -118,7 +120,8 @@ export function NewPostForm({
     null,
   );
 
-  // Foto importada do Instagram: já está no storage, "no palco" até publicar (docs/08 #37).
+  // Mídia importada do Instagram ou do TikTok: já está no storage, "no palco" até
+  // publicar (docs/08 #37 e #48).
   const [imported, setImported] = useState<{ photoId: string } | null>(null);
   const [igOpen, setIgOpen] = useState(() => sharedLink !== null);
   const [igUrl, setIgUrl] = useState(() => sharedLink?.url ?? "");
@@ -293,10 +296,23 @@ export function NewPostForm({
     setMediaError(null);
   }
 
-  const importFromInstagram = useCallback((url: string) => {
+  /** Instagram ou TikTok, pelo link: as duas actions devolvem o mesmo formato. */
+  const importFromLink = useCallback((raw: string) => {
     setIgError(null);
+    const link = detectImportLink(raw);
+    if (!link) {
+      setIgError(NOT_AN_IMPORT_LINK);
+      return;
+    }
+    const importer: Record<
+      ImportProvider,
+      (url: string) => Promise<Awaited<ReturnType<typeof importInstagramPost>>>
+    > = {
+      instagram: importInstagramPost,
+      tiktok: importTikTokPost,
+    };
     startImport(async () => {
-      const result = await importInstagramPost(url);
+      const result = await importer[link.provider](link.url);
       if (!result.ok || !result.photoId || (!result.url && !result.videoUrl)) {
         setIgError(result.error ?? "Não rolou importar. Tenta de novo.");
         return;
@@ -323,13 +339,13 @@ export function NewPostForm({
   }, []);
 
   // Link compartilhado: dispara a importação uma vez. O ref segura a segunda chamada
-  // do StrictMode (e uma importação é um fetch no Instagram, não pode dobrar).
+  // do StrictMode (e uma importação é um fetch lá fora, não pode dobrar).
   const sharedRef = useRef(false);
   useEffect(() => {
     if (sharedRef.current || !sharedLink) return;
     sharedRef.current = true;
-    importFromInstagram(sharedLink.url);
-  }, [sharedLink, importFromInstagram]);
+    importFromLink(sharedLink.url);
+  }, [sharedLink, importFromLink]);
 
   const canPublish = chosen !== null && (hasMedia || body.trim().length > 0);
 
@@ -505,13 +521,13 @@ export function NewPostForm({
             aria-expanded={igOpen}
             onClick={() => setIgOpen((open) => !open)}
           >
-            📸 Importar do Instagram
+            📥 Importar do Instagram ou TikTok
           </Button>
         ) : null}
         {igOpen && !preview ? (
           <div className="border-border flex flex-col gap-2 rounded-xl border p-3">
             <label htmlFor="ig-url" className="text-sm font-medium">
-              Cola o link do post
+              Cola o link do post ou do vídeo
             </label>
             <div className="flex gap-2">
               <Input
@@ -524,9 +540,9 @@ export function NewPostForm({
                 onKeyDown={(event) => {
                   if (event.key !== "Enter") return;
                   event.preventDefault();
-                  if (igUrl.trim() !== "" && !igPending) importFromInstagram(igUrl);
+                  if (igUrl.trim() !== "" && !igPending) importFromLink(igUrl);
                 }}
-                placeholder="https://www.instagram.com/p/…"
+                placeholder="instagram.com/p/… ou vm.tiktok.com/…"
                 disabled={igPending}
                 className="h-11 flex-1 text-base"
               />
@@ -535,15 +551,15 @@ export function NewPostForm({
                 size="lg"
                 className="h-11 px-4"
                 disabled={igPending || igUrl.trim() === ""}
-                onClick={() => importFromInstagram(igUrl)}
+                onClick={() => importFromLink(igUrl)}
               >
                 {igPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
                 {igPending ? "Buscando…" : "Buscar"}
               </Button>
             </div>
             <p className="text-muted-foreground text-xs">
-              Vem a primeira foto ou o vídeo (reel também) e a legenda, pra você revisar. Vídeo até
-              60 MB.
+              Instagram (post ou reel) e TikTok (vídeo ou carrossel): vem a primeira mídia e a
+              legenda, pra você revisar. Vídeo até 60 MB.
             </p>
             {igError ? (
               <p role="alert" className="text-destructive text-xs">

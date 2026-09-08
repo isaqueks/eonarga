@@ -203,7 +203,8 @@ Tela única (`/feed/novo`), tudo opcional menos o "onde":
 1. **📷 Foto / 🎬 Vídeo / 🎤 Áudio / 🖼️ Galeria** — foto e vídeo abrem a câmera direto (`capture="environment"`); a galeria aceita foto, vídeo ou áudio. **Gravar áudio** grava no próprio app: um painel com bolinha vermelha, relógio, medidor ao vivo (as últimas 40 leituras do microfone), "Parar" e "Cancelar"; para sozinho em 5 min. Escolheu ou gravou, aparece a prévia (o mesmo player do feed, no caso do áudio) com um "Tirar" pra desistir. Sem microfone liberado, o painel explica o que fazer.
 2. **Texto** — "O que tá rolando?", cresce até ~6 linhas, contador `19/1000`.
 3. **Onde você tá?** — três botões: **Onde estou** (padrão, já pede o GPS ao abrir), **Escolher lugar** (busca por nome, ordenada por distância quando tem GPS) e **Marcar no mapa** (pino arrastável). Perto de um lugar cadastrado, o GPS pergunta "Você tá no **Sebo do João**?" com "Sim" / "Não, só o endereço". Escolhido, vira uma linha "📍 …" com "Trocar" do lado. Sem GPS: "Sem GPS. Escolhe o lugar ou marca no mapa."
-4. **Publicar** — desabilitado até ter o "onde" e pelo menos foto, vídeo, áudio ou texto; embaixo, a explicação do que falta.
+4. **📥 Importar do Instagram ou TikTok** — abre uma caixa com um campo só ("Cola o link do post ou do vídeo"); o app descobre pelo link de onde é. A mídia importada aparece na mesma prévia, e a legenda preenche o texto se ele estiver vazio.
+5. **Publicar** — desabilitado até ter o "onde" e pelo menos foto, vídeo, áudio ou texto; embaixo, a explicação do que falta.
 
 ### Galera (`/galera`)
 

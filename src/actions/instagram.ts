@@ -13,6 +13,7 @@ import {
 } from "@/lib/instagram";
 import { POST_BODY_MAX } from "@/lib/posts";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { fetchLimited, openStream } from "@/lib/remote-media";
 import { discardStagedImport, stageImport } from "@/lib/staged-imports";
 import { MAX_UPLOAD_BYTES, saveImage, sniffImageMime } from "@/lib/storage";
 import {
@@ -31,9 +32,6 @@ const IMPORT_RATE_LIMIT = { limit: 10, windowMs: 10 * 60_000 };
 
 /** O embed pesa uns 250 KB; passou de 3 MB é outra coisa. */
 const HTML_MAX_BYTES = 3 * 1024 * 1024;
-const FETCH_TIMEOUT_MS = 10_000;
-/** Um reel de 40 MB numa conexão de VPS leva alguns segundos; 90 s é folga. */
-const VIDEO_TIMEOUT_MS = 90_000;
 
 // Módulo "use server": só exporta função async, então as mensagens ficam privadas.
 const NOT_A_LINK = "Isso não parece um link de post do Instagram.";
@@ -64,76 +62,9 @@ export interface InstagramImportResult extends FormState {
   slides?: number;
 }
 
-/**
- * Busca com prazo e teto de tamanho. `redirect: "manual"`: o Instagram redireciona post
- * inexistente pro login e a CDN não redireciona nunca, então qualquer 3xx é "não achei".
- */
-async function fetchLimited(url: string, maxBytes: number, accept: string): Promise<Buffer> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      redirect: "manual",
-      credentials: "omit",
-      signal: controller.signal,
-      headers: {
-        "user-agent": INSTAGRAM_FETCH_UA,
-        "accept-language": "pt-BR,pt;q=0.9",
-        accept,
-      },
-    });
-    if (!response.ok || !response.body) throw new Error(`status ${response.status}`);
-
-    const declared = Number(response.headers.get("content-length") ?? 0);
-    if (declared > maxBytes) throw new Error("too big");
-
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => {});
-        throw new Error("too big");
-      }
-      chunks.push(value);
-    }
-    return Buffer.concat(chunks);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** Abre a resposta do vídeo pra gravar em stream (`saveVideoStream` cuida do teto). */
-async function openVideo(
-  url: string,
-): Promise<{ body: ReadableStream<Uint8Array>; done: () => void }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), VIDEO_TIMEOUT_MS);
-  const response = await fetch(url, {
-    method: "GET",
-    redirect: "manual",
-    credentials: "omit",
-    signal: controller.signal,
-    headers: { "user-agent": INSTAGRAM_FETCH_UA, accept: "video/*" },
-  }).catch((error) => {
-    clearTimeout(timer);
-    throw error;
-  });
-  if (!response.ok || !response.body) {
-    clearTimeout(timer);
-    throw new Error(`status ${response.status}`);
-  }
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > MAX_VIDEO_BYTES) {
-    clearTimeout(timer);
-    await response.body.cancel().catch(() => {});
-    throw new VideoTooBigError();
-  }
-  return { body: response.body, done: () => clearTimeout(timer) };
+/** Busca com prazo e teto (`src/lib/remote-media.ts`), sempre com o nosso user-agent. */
+function fetchIg(url: string, maxBytes: number, accept: string): Promise<Buffer> {
+  return fetchLimited(url, maxBytes, { userAgent: INSTAGRAM_FETCH_UA, accept });
 }
 
 /**
@@ -150,7 +81,10 @@ async function importVideo(
 
   let video: StoredVideo;
   try {
-    const { body, done } = await openVideo(media.videoUrl);
+    const { body, done } = await openStream(media.videoUrl, MAX_VIDEO_BYTES, {
+      userAgent: INSTAGRAM_FETCH_UA,
+      accept: "video/*",
+    });
     try {
       video = await saveVideoStream(body, "mp4", MAX_VIDEO_BYTES);
     } finally {
@@ -163,7 +97,7 @@ async function importVideo(
   let poster: { id: string; width: number; height: number } | null = null;
   if (media.posterUrl && isInstagramMediaUrl(media.posterUrl)) {
     try {
-      const image = await fetchLimited(media.posterUrl, MAX_UPLOAD_BYTES, "image/*");
+      const image = await fetchIg(media.posterUrl, MAX_UPLOAD_BYTES, "image/*");
       if (sniffImageMime(image)) {
         poster = await saveImage(image, { maxSize: PHOTO_MAX_SIZE, thumbSize: PHOTO_THUMB_SIZE });
       }
@@ -193,7 +127,7 @@ export async function importInstagramPost(input: string): Promise<InstagramImpor
 
   let html: string;
   try {
-    const bytes = await fetchLimited(
+    const bytes = await fetchIg(
       embedUrlFor(link.shortcode),
       HTML_MAX_BYTES,
       "text/html,application/xhtml+xml",
@@ -245,7 +179,7 @@ export async function importInstagramPost(input: string): Promise<InstagramImpor
 
   let saved: { id: string; width: number; height: number };
   try {
-    const image = await fetchLimited(parsed.media.imageUrl, MAX_UPLOAD_BYTES, "image/*");
+    const image = await fetchIg(parsed.media.imageUrl, MAX_UPLOAD_BYTES, "image/*");
     if (!sniffImageMime(image)) return { ok: false, error: IMAGE_FAILED };
     saved = await saveImage(image, { maxSize: PHOTO_MAX_SIZE, thumbSize: PHOTO_THUMB_SIZE });
   } catch {
@@ -274,7 +208,7 @@ export async function importInstagramPost(input: string): Promise<InstagramImpor
   };
 }
 
-/** Desistiu da mídia importada antes de publicar: apaga do palco e do disco. */
+/** Desistiu da mídia importada (Instagram ou TikTok) antes de publicar: apaga do palco e do disco. */
 export async function discardInstagramImport(photoId: string): Promise<FormState> {
   const { user } = await assertUser();
   if (typeof photoId !== "string" || photoId === "") return { ok: true };

@@ -474,8 +474,13 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   // depende do Instagram e não é conferida aqui; o código inexistente mantém qualquer
   // resposta pequena (nada de baixar um reel de 40 MB no meio do teste).
   await page.goto("/feed/novo?text=https%3A%2F%2Fwww.instagram.com%2Freel%2Fzzzzzzzzzzz%2F");
-  await expect(page.getByLabel("Cola o link do post")).toHaveValue(
+  await expect(page.getByLabel("Cola o link do post ou do vídeo")).toHaveValue(
     "https://www.instagram.com/reel/zzzzzzzzzzz/",
+  );
+  // Link curto do TikTok também abre a caixa (a busca falha rápido: o código não existe).
+  await page.goto("/feed/novo?text=https%3A%2F%2Fvm.tiktok.com%2FZMzzzzzzzz%2F");
+  await expect(page.getByLabel("Cola o link do post ou do vídeo")).toHaveValue(
+    "https://vm.tiktok.com/ZMzzzzzzzz",
   );
   await page.goto("/feed", { waitUntil: "networkidle" });
 
