@@ -6,7 +6,7 @@ import { notifications, postComments, postReactions, posts, users } from "@/lib/
 import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 
 /**
- * Flop de post (docs/08 #50): post que completa 6 horas sem reação nem comentário de
+ * Flop de post (docs/08 #50): post que completa 4 horas sem reação nem comentário de
  * outra pessoa vira um aviso no feed, "O post de Fulano flopou 200%", e um push só pro
  * autor, "Seu post flopou 200%". Reagir ou comentar no próprio post não salva ninguém.
  *
@@ -16,8 +16,8 @@ import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
  * `instrumentation.ts` quando o servidor sobe.
  */
 
-/** Seis horas sem ninguém: flopou. */
-export const FLOP_AFTER_MS = 6 * 60 * 60 * 1000;
+/** Quatro horas sem ninguém: flopou (eram 6 até a 0.18.1; docs/08 #53). */
+export const FLOP_AFTER_MS = 4 * 60 * 60 * 1000;
 /**
  * Post mais velho que isso é deixado em paz. É o que impede o primeiro deploy (ou uma
  * volta depois de horas fora do ar) de flopar o feed inteiro de uma vez.
@@ -45,7 +45,7 @@ export interface FloppedPost {
 }
 
 /**
- * Uma passada: acha os posts que completaram 6 h sem reação nem comentário de outra
+ * Uma passada: acha os posts que completaram 4 h sem reação nem comentário de outra
  * pessoa, publica o aviso de cada um e manda o push pro autor. Idempotente: o mesmo
  * post nunca flopa duas vezes. `now` é parâmetro pra dar pra testar (e pro e2e
  * adiantar o relógio).

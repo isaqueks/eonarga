@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /**
  * Roda a varredura de flop agora (docs/08 #50), em vez de esperar os 5 minutos do
  * timer. Só admin. Fora de produção aceita `{ "now": "<ISO>" }` no corpo pra adiantar
- * o relógio — é como o e2e flopa um post recém-criado sem esperar 6 horas.
+ * o relógio — é como o e2e flopa um post recém-criado sem esperar 4 horas.
  */
 export async function POST(request: Request) {
   const user = await getApiUser();

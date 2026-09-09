@@ -807,7 +807,7 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await shot(page, "22d-feed-com-audio");
   await player.getByRole("button", { name: "Pausar" }).click();
 
-  // --- Flop: 6 h sem ninguém vira aviso do app no feed ----------------------
+  // --- Flop: 4 h sem ninguém vira aviso do app no feed ----------------------
   // A varredura de verdade roda a cada 5 min no servidor; aqui o admin chama a rota
   // adiantando o relógio em 7 h. Os cinco posts são do Admin e só têm reação e
   // comentário dele mesmo, o que não salva ninguém: flopam todos.

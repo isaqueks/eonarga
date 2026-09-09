@@ -127,10 +127,10 @@ describe("flopBody", () => {
 });
 
 describe("sweepFlops", () => {
-  it("post com 6 h sem ninguém vira aviso no feed e push pro autor", async () => {
+  it("post com 4 h sem ninguém vira aviso no feed e push pro autor", async () => {
     await subscribe("sub-ana", ANA.id);
     await subscribe("sub-bia", BIA.id);
-    const postId = await seedPost({ ageHours: 6.5, body: "ninguém viu isso", placeId: null });
+    const postId = await seedPost({ ageHours: 4.5, body: "ninguém viu isso", placeId: null });
 
     const flopped = await flop.sweepFlops(NOW);
 
@@ -206,8 +206,8 @@ describe("sweepFlops", () => {
     expect(flopped.map((f) => f.postId).sort()).toEqual([soAutoComentario, soAutoCurtida].sort());
   });
 
-  it("respeita a janela: menos de 6 h não flopou ainda, mais de 12 h é deixado em paz", async () => {
-    const novo = await seedPost({ ageHours: 5.9 });
+  it("respeita a janela: menos de 4 h não flopou ainda, mais de 12 h é deixado em paz", async () => {
+    const novo = await seedPost({ ageHours: 3.9 });
     const naJanela = await seedPost({ ageHours: 11.9 });
     const velho = await seedPost({ ageHours: 12.1 });
 
@@ -224,7 +224,7 @@ describe("sweepFlops", () => {
     const first = await flop.sweepFlops(NOW);
     expect(first).toHaveLength(1);
 
-    // Segunda passada: nada novo. Nem seis horas depois, quando o aviso já teria "idade".
+    // Segunda passada: nada novo. Nem sete horas depois, quando o aviso já teria "idade".
     expect(await flop.sweepFlops(NOW)).toEqual([]);
     const later = new Date(NOW.getTime() + 7 * 3_600_000);
     expect(await flop.sweepFlops(later)).toEqual([]);
