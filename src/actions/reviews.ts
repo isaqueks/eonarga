@@ -7,8 +7,9 @@ import { redirect } from "next/navigation";
 
 import { field, fieldErrorsFrom, type FormState } from "@/actions/form-state";
 import { assertUser } from "@/lib/auth/guards";
+import { deleteCommentMedia } from "@/lib/comment-media";
 import { db } from "@/lib/db/client";
-import { places, reviewReactions, reviews, userPlaceStatus } from "@/lib/db/schema";
+import { places, reviewComments, reviewReactions, reviews, userPlaceStatus } from "@/lib/db/schema";
 import {
   CONTENT_TEXT_MAX,
   CONTENT_TOO_LONG,
@@ -131,8 +132,9 @@ export async function upsertReview(_prev: FormState, formData: FormData): Promis
 }
 
 /**
- * Apaga a avaliação. Dono ou admin (docs/05 — Permissões). As reações vão junto
- * pelo `on delete cascade`; o "já fui" fica, porque a pessoa foi mesmo.
+ * Apaga a avaliação. Dono ou admin (docs/05 — Permissões). As reações e as respostas
+ * vão junto pelo `on delete cascade` (os anexos das respostas, do disco, aqui); o
+ * "já fui" fica, porque a pessoa foi mesmo.
  */
 export async function deleteReview(reviewId: string): Promise<FormState> {
   const { user } = await assertUser();
@@ -143,7 +145,13 @@ export async function deleteReview(reviewId: string): Promise<FormState> {
     return { ok: false, error: NOT_YOURS };
   }
 
+  const attachments = await db
+    .select({ photoId: reviewComments.photoId, audioId: reviewComments.audioId })
+    .from(reviewComments)
+    .where(eq(reviewComments.reviewId, review.id));
+
   await db.delete(reviews).where(eq(reviews.id, review.id));
+  await deleteCommentMedia(attachments);
 
   revalidatePath(`/lugares/${review.slug}`);
   revalidatePath("/ranking");

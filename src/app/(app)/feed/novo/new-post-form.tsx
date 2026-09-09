@@ -26,7 +26,12 @@ import { AUDIO_MAX_BYTES, PHOTO_MAX_BYTES, VIDEO_MAX_BYTES } from "@/lib/constan
 import type { PostPlaceOption } from "@/lib/queries/posts";
 import { cn } from "@/lib/utils";
 
-import { analyzeAudioFile, AudioRecorder, canRecordAudio, type Recording } from "./audio-recorder";
+import {
+  analyzeAudioFile,
+  AudioRecorder,
+  canRecordAudio,
+  type Recording,
+} from "@/components/posts/audio-recorder";
 
 /** Os três jeitos de dizer de onde você tá postando. */
 type Mode = "gps" | "place" | "map";

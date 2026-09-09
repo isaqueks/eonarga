@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   COMMENT_PUSH_EXCERPT_MAX,
+  commentMediaKind,
   commentNotificationBody,
+  commentPushExcerpt,
   FEED_PREVIEW_MAX,
   formatLatLng,
   haversineMeters,
@@ -198,6 +200,32 @@ describe("commentNotificationBody", () => {
   it("não corta comentário que cabe", () => {
     const justo = "a".repeat(COMMENT_PUSH_EXCERPT_MAX);
     expect(commentNotificationBody("Bia", justo)).toContain(`“${justo}”`);
+  });
+});
+
+describe("commentPushExcerpt (foto e áudio)", () => {
+  it("só foto vira 📷 Foto, só áudio 🎤 Áudio, e com legenda o emoji vem antes das aspas", () => {
+    expect(commentPushExcerpt("", "photo")).toBe("📷 Foto");
+    expect(commentPushExcerpt("   ", "audio")).toBe("🎤 Áudio");
+    expect(commentPushExcerpt("olha isso", "photo")).toBe("📷 “olha isso”");
+    expect(commentPushExcerpt("ouve", "audio")).toBe("🎤 “ouve”");
+    expect(commentPushExcerpt("só texto", null)).toBe("“só texto”");
+  });
+
+  it("entra nas frases de comentário e de curtida", () => {
+    expect(commentNotificationBody("Bia", "", "photo")).toBe("Bia comentou no seu post: 📷 Foto");
+    expect(likeNotificationBody("Bia", "post", "", "audio")).toBe(
+      "Bia curtiu seu comentário: 🎤 Áudio",
+    );
+    expect(likeNotificationBody("Bia", "review", "vê", "photo")).toBe(
+      "Bia curtiu sua resposta: 📷 “vê”",
+    );
+  });
+
+  it("commentMediaKind lê as colunas", () => {
+    expect(commentMediaKind({ photoId: "x", audioId: null })).toBe("photo");
+    expect(commentMediaKind({ photoId: null, audioId: "y" })).toBe("audio");
+    expect(commentMediaKind({ photoId: null, audioId: null })).toBeNull();
   });
 });
 

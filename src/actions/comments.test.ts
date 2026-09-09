@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import sharp from "sharp";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FormState } from "@/actions/form-state";
@@ -59,6 +60,7 @@ let reviewQueries: typeof import("@/lib/queries/reviews");
 let db: ClientModule["db"];
 let schema: SchemaModule;
 let tmpDir: string;
+let uploadDir: string;
 
 const empty: FormState = { ok: false };
 
@@ -91,8 +93,11 @@ async function seed(who: typeof ANA, body: string, reviewId = REVIEW_ID): Promis
 
 beforeAll(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "eonarga-comments-"));
+  uploadDir = path.join(tmpDir, "uploads");
   const file = path.join(tmpDir, "test.db").split(path.sep).join("/");
   process.env.DATABASE_URL = `file:${file}`;
+  // storage.ts lê UPLOAD_DIR no import: tem que estar de pé antes do primeiro import.
+  process.env.UPLOAD_DIR = uploadDir;
 
   const { runMigrations } = await import("@/lib/db/migrate");
   await runMigrations();
@@ -197,7 +202,9 @@ describe("addComment", () => {
     for (const body of ["", "   ", "\n\t ", "a".repeat(501)]) {
       const result = await add(body);
       expect(result.ok, JSON.stringify(body)).toBe(false);
-      expect(result.fieldErrors?.body).toBe("Escreve alguma coisa (até 500 caracteres).");
+      expect(result.fieldErrors?.body).toBe(
+        "Escreve alguma coisa (até 500 caracteres), ou manda uma foto ou um áudio.",
+      );
     }
     expect(await rows()).toHaveLength(0);
   });
@@ -270,6 +277,132 @@ describe("deleteComment", () => {
     await seed(BIA, "vai sumir");
     await db.delete(schema.reviews).where(eq(schema.reviews.id, REVIEW_ID));
     expect(await rows()).toHaveLength(0);
+
+    // Recoloca a avaliação pros outros testes.
+    await db.insert(schema.reviews).values({
+      id: REVIEW_ID,
+      placeId: PLACE_ID,
+      userId: ANA.id,
+      rating: 9,
+      verdict: "Café bom, livro barato.",
+    });
+  });
+});
+
+describe("resposta com foto ou áudio (docs/08 #52)", () => {
+  async function png(): Promise<File> {
+    const data = await sharp({
+      create: { width: 120, height: 80, channels: 3, background: "#8fd3b0" },
+    })
+      .png()
+      .toBuffer();
+    return new File([new Uint8Array(data)], "foto.png", { type: "image/png" });
+  }
+
+  function webm(): File {
+    const data = fs.readFileSync(path.resolve("e2e/fixtures/tiny.webm"));
+    return new File([new Uint8Array(data)], "gravacao.webm", { type: "audio/webm;codecs=opus" });
+  }
+
+  function withFile(fields: Record<string, string>, name: string, file: File): FormData {
+    const fd = form(fields);
+    fd.set(name, file);
+    return fd;
+  }
+
+  function fileExists(name: string): boolean {
+    return fs.existsSync(path.join(uploadDir, name));
+  }
+
+  it("foto sem texto entra, reprocessada, e chega na thread com as dimensões", async () => {
+    expect(
+      await actions.addComment(empty, withFile({ reviewId: REVIEW_ID }, "photo", await png())),
+    ).toEqual({ ok: true });
+
+    const [row] = await rows();
+    expect(row).toMatchObject({ body: "", photoWidth: 120, photoHeight: 80, audioId: null });
+    expect(fileExists(`${row.photoId}.webp`)).toBe(true);
+    expect(fileExists(`${row.photoId}.thumb.webp`)).toBe(true);
+
+    const list = (
+      await comments.listCommentsForReviews([REVIEW_ID], { id: ANA.id, role: "member" })
+    ).get(REVIEW_ID)!;
+    expect(list[0].photo).toEqual({
+      id: row.photoId,
+      url: `/api/uploads/${row.photoId}`,
+      thumbUrl: `/api/uploads/${row.photoId}?v=thumb`,
+      width: 120,
+      height: 80,
+    });
+    expect(list[0].audio).toBeNull();
+
+    // Apagar a resposta leva os arquivos.
+    expect(await actions.deleteComment(row.id)).toEqual({ ok: true });
+    expect(fileExists(`${row.photoId}.webp`)).toBe(false);
+    expect(fileExists(`${row.photoId}.thumb.webp`)).toBe(false);
+  });
+
+  it("áudio com texto entra com duração e forma de onda", async () => {
+    expect(
+      await actions.addComment(
+        empty,
+        withFile(
+          { reviewId: REVIEW_ID, body: "ouve", audioDurationMs: "3000", audioPeaks: "[1,0]" },
+          "audio",
+          webm(),
+        ),
+      ),
+    ).toEqual({ ok: true });
+
+    const [row] = await rows();
+    expect(row).toMatchObject({
+      body: "ouve",
+      photoId: null,
+      audioExt: "webm",
+      audioDurationMs: 3000,
+    });
+    expect(fileExists(`${row.audioId}.webm`)).toBe(true);
+
+    const list = (
+      await comments.listCommentsForReviews([REVIEW_ID], { id: ANA.id, role: "member" })
+    ).get(REVIEW_ID)!;
+    expect(list[0].audio).toEqual({
+      id: row.audioId,
+      url: `/api/audios/${row.audioId}.webm`,
+      ext: "webm",
+      durationMs: 3000,
+      peaks: [1, 0],
+    });
+  });
+
+  it("lugar arquivado não recebe anexo, e lixo disfarçado de foto é recusado", async () => {
+    expect(
+      await actions.addComment(
+        empty,
+        withFile({ reviewId: ARCHIVED_REVIEW_ID }, "photo", await png()),
+      ),
+    ).toEqual({ ok: false, error: "Esse lugar está arquivado." });
+
+    const pdf = new File([new TextEncoder().encode("%PDF-1.4")], "x.png", { type: "image/png" });
+    expect(
+      await actions.addComment(empty, withFile({ reviewId: REVIEW_ID }, "photo", pdf)),
+    ).toEqual({ ok: false, error: "Isso não é uma foto que eu reconheça." });
+    expect(await rows()).toHaveLength(0);
+  });
+
+  it("apagar a avaliação apaga os anexos das respostas", async () => {
+    const reviewActions = await import("@/actions/reviews");
+    await actions.addComment(empty, withFile({ reviewId: REVIEW_ID }, "photo", await png()));
+    await actions.addComment(empty, withFile({ reviewId: REVIEW_ID }, "audio", webm()));
+    const all = await rows();
+    const photoId = all.find((r) => r.photoId)!.photoId!;
+    const audioId = all.find((r) => r.audioId)!.audioId!;
+
+    state.user = ANA;
+    expect(await reviewActions.deleteReview(REVIEW_ID)).toEqual({ ok: true });
+    expect(await rows()).toHaveLength(0);
+    expect(fileExists(`${photoId}.webp`)).toBe(false);
+    expect(fileExists(`${audioId}.webm`)).toBe(false);
 
     // Recoloca a avaliação pros outros testes.
     await db.insert(schema.reviews).values({

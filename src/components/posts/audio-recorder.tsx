@@ -46,9 +46,9 @@ function readLevel(analyser: AnalyserNode, samples: Float32Array<ArrayBuffer>): 
 }
 
 /**
- * Gravador de áudio do post (docs/08 #47): começa a gravar ao aparecer (quem clicou em
- * "Gravar áudio" já quer gravar), mostra o tempo e as últimas barras do medidor, e
- * para sozinho em 5 min. "Parar" entrega o arquivo com a duração medida e a forma de
+ * Gravador de áudio de post e de comentário (docs/08 #47 e #52): começa a gravar ao
+ * aparecer (quem clicou em "Gravar áudio" já quer gravar), mostra o tempo e as últimas
+ * barras do medidor, e para sozinho em 5 min. "Parar" entrega o arquivo com a duração medida e a forma de
  * onda; "Cancelar" joga tudo fora. O microfone é solto nos dois casos.
  */
 export function AudioRecorder({

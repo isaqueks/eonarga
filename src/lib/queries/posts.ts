@@ -15,19 +15,12 @@ import {
 import { loadCommentLikes } from "@/lib/queries/comment-likes";
 import { previewText } from "@/lib/posts";
 import type { PersonRef } from "@/lib/queries/places";
+import { toMediaAudio, toMediaPhoto, type MediaAudio, type MediaPhoto } from "@/lib/queries/media";
 import type { ReactionSummary } from "@/lib/queries/reviews";
-import { isAudioExt, type AudioExt } from "@/lib/audio-storage";
 import { isVideoExt, type VideoExt } from "@/lib/video-storage";
 
-export interface PostPhoto {
-  id: string;
-  /** Variante grande (até 1600 px). */
-  url: string;
-  /** Quadrada, 400 px. */
-  thumbUrl: string;
-  width: number;
-  height: number;
-}
+/** A foto do post: variante grande (até 1600 px) e a quadrada de 400 px. */
+export type PostPhoto = MediaPhoto;
 
 /** O vídeo do post; com vídeo, `photo` (se houver) é a capa. */
 export interface PostVideo {
@@ -40,16 +33,7 @@ export interface PostVideo {
 }
 
 /** O áudio do post (docs/08 #47), pro player do card. */
-export interface PostAudio {
-  id: string;
-  /** `/api/audios/<id>.<ext>`, com Range. */
-  url: string;
-  ext: AudioExt;
-  /** Duração medida pelo navegador ao gravar/escolher; 0 quando não veio. */
-  durationMs: number;
-  /** Forma de onda (0..1), ou null: aí o player desenha barras iguais. */
-  peaks: number[] | null;
-}
+export type PostAudio = MediaAudio;
 
 /** O lugar cadastrado de onde o post saiu, quando foi de um. */
 export interface PostPlaceRef {
@@ -81,7 +65,12 @@ export const FLOP_EXCERPT_MAX = 120;
 /** Um comentário no post, pronto pro card. */
 export interface PostCommentItem {
   id: string;
+  /** Texto puro; vazio quando o comentário é só foto ou só áudio (docs/08 #52). */
   body: string;
+  /** A foto do comentário, quando tem. */
+  photo: MediaPhoto | null;
+  /** O áudio do comentário, quando tem. */
+  audio: MediaAudio | null;
   createdAt: string;
   author: PersonRef;
   /** Quem comentou, quem postou (é a thread do post) ou admin (docs/05 — Permissões). */
@@ -210,17 +199,6 @@ type PostRow = {
   authorAvatarId: string | null;
 };
 
-/** A forma de onda gravada como JSON; qualquer coisa estranha no banco vira null. */
-function parseStoredPeaks(raw: string | null): number[] | null {
-  if (!raw) return null;
-  try {
-    const value: unknown = JSON.parse(raw);
-    return Array.isArray(value) && value.every((n) => typeof n === "number") ? value : null;
-  } catch {
-    return null;
-  }
-}
-
 /** A prévia do post que flopou; o aviso sem original (não deveria existir) fica genérico. */
 function toFlop(row: PostRow): PostFlopRef | null {
   if (!row.flopOfPostId) return null;
@@ -295,6 +273,13 @@ async function loadComments(postIds: string[], viewer: PostViewer | null) {
       id: postComments.id,
       postId: postComments.postId,
       body: postComments.body,
+      photoId: postComments.photoId,
+      photoWidth: postComments.photoWidth,
+      photoHeight: postComments.photoHeight,
+      audioId: postComments.audioId,
+      audioExt: postComments.audioExt,
+      audioDurationMs: postComments.audioDurationMs,
+      audioPeaks: postComments.audioPeaks,
       createdAt: postComments.createdAt,
       authorId: users.id,
       authorName: users.name,
@@ -319,6 +304,8 @@ async function loadComments(postIds: string[], viewer: PostViewer | null) {
     const item: PostCommentItem = {
       id: row.id,
       body: row.body,
+      photo: toMediaPhoto(row),
+      audio: toMediaAudio(row),
       createdAt: row.createdAt,
       author: { id: row.authorId, name: row.authorName, avatarId: row.authorAvatarId },
       canDelete:
@@ -344,15 +331,7 @@ function toItem(
   return {
     id: row.id,
     body: row.body,
-    photo: row.photoId
-      ? {
-          id: row.photoId,
-          url: `/api/uploads/${row.photoId}`,
-          thumbUrl: `/api/uploads/${row.photoId}?v=thumb`,
-          width: row.photoWidth ?? 0,
-          height: row.photoHeight ?? 0,
-        }
-      : null,
+    photo: toMediaPhoto(row),
     video:
       row.videoId && row.videoExt && isVideoExt(row.videoExt)
         ? {
@@ -363,16 +342,7 @@ function toItem(
             height: row.videoHeight ?? 0,
           }
         : null,
-    audio:
-      row.audioId && row.audioExt && isAudioExt(row.audioExt)
-        ? {
-            id: row.audioId,
-            url: `/api/audios/${row.audioId}.${row.audioExt}`,
-            ext: row.audioExt,
-            durationMs: row.audioDurationMs ?? 0,
-            peaks: parseStoredPeaks(row.audioPeaks),
-          }
-        : null,
+    audio: toMediaAudio(row),
     place:
       row.placeId && row.placeSlug && row.placeName
         ? {

@@ -3,12 +3,18 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { reviewCommentLikes, reviewComments, reviews, users } from "@/lib/db/schema";
 import { loadCommentLikes } from "@/lib/queries/comment-likes";
+import { toMediaAudio, toMediaPhoto, type MediaAudio, type MediaPhoto } from "@/lib/queries/media";
 import type { Viewer } from "@/lib/queries/reviews";
 
 export interface CommentItem {
   id: string;
   reviewId: string;
+  /** Texto puro; vazio quando a resposta é só foto ou só áudio (docs/08 #52). */
   body: string;
+  /** A foto da resposta, quando tem. */
+  photo: MediaPhoto | null;
+  /** O áudio da resposta, quando tem. */
+  audio: MediaAudio | null;
   createdAt: string;
   author: { id: string; name: string; avatarId: string | null };
   /** Autor da resposta, autor da avaliação ou admin (docs/05 — Permissões). */
@@ -34,6 +40,13 @@ export async function listCommentsForReviews(
       id: reviewComments.id,
       reviewId: reviewComments.reviewId,
       body: reviewComments.body,
+      photoId: reviewComments.photoId,
+      photoWidth: reviewComments.photoWidth,
+      photoHeight: reviewComments.photoHeight,
+      audioId: reviewComments.audioId,
+      audioExt: reviewComments.audioExt,
+      audioDurationMs: reviewComments.audioDurationMs,
+      audioPeaks: reviewComments.audioPeaks,
       createdAt: reviewComments.createdAt,
       authorId: users.id,
       authorName: users.name,
@@ -59,6 +72,8 @@ export async function listCommentsForReviews(
       id: row.id,
       reviewId: row.reviewId,
       body: row.body,
+      photo: toMediaPhoto(row),
+      audio: toMediaAudio(row),
       createdAt: row.createdAt,
       author: { id: row.authorId, name: row.authorName, avatarId: row.authorAvatarId },
       canDelete:

@@ -38,6 +38,17 @@ export function resamplePeaks(levels: ArrayLike<number>, count = AUDIO_PEAKS_COU
   return bars.map((v) => Math.round((v / max) * 100) / 100);
 }
 
+/** A forma de onda como foi gravada no banco (JSON); qualquer coisa estranha vira null. */
+export function parseStoredPeaks(raw: string | null): number[] | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value) && value.every((n) => typeof n === "number") ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 7 400 ms → "0:07"; 61 000 → "1:01"; 3 600 000 → "60:00". Negativo ou lixo vira "0:00". */
 export function formatClock(ms: number): string {
   const seconds = Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : 0;

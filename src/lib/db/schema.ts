@@ -157,6 +157,24 @@ export const reviewReactions = sqliteTable(
 );
 
 /**
+ * Foto e áudio num comentário (docs/08 #52): as mesmas colunas de um post, só que sem
+ * vídeo. Foto no storage de imagens (`{id}.webp` / `{id}.thumb.webp`) com as dimensões;
+ * áudio no mesmo storage dos posts, com extensão, duração medida pelo navegador e forma
+ * de onda (JSON). Uma função porque `post_comments` e `review_comments` são gêmeas.
+ */
+function commentMediaColumns() {
+  return {
+    photoId: text("photo_id"),
+    photoWidth: integer("photo_width"),
+    photoHeight: integer("photo_height"),
+    audioId: text("audio_id"),
+    audioExt: text("audio_ext"),
+    audioDurationMs: integer("audio_duration_ms"),
+    audioPeaks: text("audio_peaks"),
+  };
+}
+
+/**
  * Respostas numa avaliação: thread curta, sem aninhamento (docs/01 — v2).
  * Some junto com a avaliação e com quem escreveu.
  */
@@ -170,8 +188,10 @@ export const reviewComments = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Texto puro, no máximo COMMENT_MAX caracteres (validado na action).
+    // Texto puro, no máximo COMMENT_MAX caracteres (validado na action). Vazio ("")
+    // quando a resposta é só foto ou só áudio (docs/08 #52).
     body: text("body").notNull(),
+    ...commentMediaColumns(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -377,8 +397,10 @@ export const postComments = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Texto puro, no máximo COMMENT_MAX caracteres (validado na action).
+    // Texto puro, no máximo COMMENT_MAX caracteres (validado na action). Vazio ("")
+    // quando o comentário é só foto ou só áudio (docs/08 #52).
     body: text("body").notNull(),
+    ...commentMediaColumns(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

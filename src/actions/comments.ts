@@ -7,6 +7,13 @@ import { z } from "zod";
 
 import { field, fieldErrorsFrom, type FormState } from "@/actions/form-state";
 import { assertUser } from "@/lib/auth/guards";
+import {
+  commentMediaValues,
+  deleteCommentMedia,
+  EMPTY_COMMENT_MEDIA,
+  hasCommentMedia,
+  saveCommentMedia,
+} from "@/lib/comment-media";
 import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
 import {
@@ -19,13 +26,15 @@ import {
   reviews,
 } from "@/lib/db/schema";
 import { notifyMentions } from "@/lib/notify-mentions";
-import { likeNotificationBody } from "@/lib/posts";
+import { commentMediaKind, likeNotificationBody } from "@/lib/posts";
 import { avatarIcon, isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 import type { CommentLikesTable } from "@/lib/queries/comment-likes";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 // Módulo "use server": só pode exportar função async, então as mensagens ficam privadas.
-const BODY_ERROR = `Escreve alguma coisa (até ${COMMENT_MAX} caracteres).`;
+const BODY_ERROR = `Escreve alguma coisa (até ${COMMENT_MAX} caracteres), ou manda uma foto ou um áudio.`;
+const TOO_MANY = "Calma, influencer.";
+const SAVE_FAILED = "Não deu pra salvar. Tenta de novo.";
 const REVIEW_NOT_FOUND = "Avaliação não encontrada.";
 const PLACE_ARCHIVED = "Esse lugar está arquivado.";
 const COMMENT_NOT_FOUND = "Resposta não encontrada.";
@@ -37,10 +46,13 @@ const LIKE_NOT_FOUND = "Esse comentário não existe mais.";
  * o coração vira brinquedo de spam (docs/08 #44).
  */
 const LIKE_NOTIFY_LIMIT = { limit: 1, windowMs: 60 * 60_000 };
+/** Resposta com foto ou áudio: 30 por hora por pessoa (texto não conta). */
+const COMMENT_MEDIA_RATE_LIMIT = { limit: 30, windowMs: 60 * 60_000 };
 
+// "Tem texto ou anexo" é regra da action: o texto sozinho pode vir vazio (docs/08 #52).
 const commentSchema = z.object({
   reviewId: z.string().trim().min(1, REVIEW_NOT_FOUND),
-  body: z.string().trim().min(1, BODY_ERROR).max(COMMENT_MAX, BODY_ERROR),
+  body: z.string().trim().max(COMMENT_MAX, BODY_ERROR),
 });
 
 /** A avaliação com o lugar junto: precisa do slug pra revalidar e do status pra barrar arquivado. */
@@ -60,7 +72,11 @@ async function findReviewWithPlace(reviewId: string) {
   return rows[0] ?? null;
 }
 
-/** Responde uma avaliação. Qualquer membro responde qualquer avaliação (nada é privado). */
+/**
+ * Responde uma avaliação: texto, foto ou áudio (docs/08 #52). Qualquer membro responde
+ * qualquer avaliação (nada é privado). O anexo passa pelas mesmas regras da mídia de
+ * post (`src/lib/comment-media.ts`).
+ */
 export async function addComment(_prev: FormState, formData: FormData): Promise<FormState> {
   const { user } = await assertUser();
 
@@ -70,34 +86,52 @@ export async function addComment(_prev: FormState, formData: FormData): Promise<
   });
   if (!parsed.success) return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) };
   const data = parsed.data;
+  const withMedia = hasCommentMedia(formData);
+  if (!data.body && !withMedia) return { ok: false, fieldErrors: { body: BODY_ERROR } };
 
   const review = await findReviewWithPlace(data.reviewId);
   if (!review) return { ok: false, error: REVIEW_NOT_FOUND };
   if (review.placeStatus !== "active") return { ok: false, error: PLACE_ARCHIVED };
 
-  await db.insert(reviewComments).values({
-    id: nanoid(12),
-    reviewId: review.id,
-    userId: user.id,
-    body: data.body,
-  });
+  if (withMedia && !checkRateLimit(`comment-media:${user.id}`, COMMENT_MEDIA_RATE_LIMIT).ok) {
+    return { ok: false, error: TOO_MANY };
+  }
+  const saved = withMedia ? await saveCommentMedia(formData) : null;
+  if (saved && !saved.ok) return { ok: false, error: saved.error };
+  const media = saved ? saved.media : EMPTY_COMMENT_MEDIA;
+
+  try {
+    await db.insert(reviewComments).values({
+      id: nanoid(12),
+      reviewId: review.id,
+      userId: user.id,
+      body: data.body,
+      ...commentMediaValues(media),
+    });
+  } catch {
+    // Sem linha no banco o anexo é lixo: apaga em vez de deixar órfão.
+    await deleteCommentMedia(commentMediaValues(media));
+    return { ok: false, error: SAVE_FAILED };
+  }
 
   // Quem foi citado na resposta leva um push apontando pra ficha.
-  await notifyMentions({
-    text: data.body,
-    author: { id: user.id, name: user.name, avatarId: user.avatarId },
-    where: "comment",
-    url: `/lugares/${review.slug}#avaliacoes`,
-    placeId: review.placeId,
-  });
+  if (data.body) {
+    await notifyMentions({
+      text: data.body,
+      author: { id: user.id, name: user.name, avatarId: user.avatarId },
+      where: "comment",
+      url: `/lugares/${review.slug}#avaliacoes`,
+      placeId: review.placeId,
+    });
+  }
 
   revalidatePath(`/lugares/${review.slug}`);
   return { ok: true };
 }
 
 /**
- * Apaga a resposta. Quem escreveu, quem escreveu a avaliação (é a thread dela) ou
- * um admin (docs/05 — Permissões).
+ * Apaga a resposta e o anexo dela. Quem escreveu, quem escreveu a avaliação (é a
+ * thread dela) ou um admin (docs/05 — Permissões).
  */
 export async function deleteComment(commentId: string): Promise<FormState> {
   const { user } = await assertUser();
@@ -106,6 +140,8 @@ export async function deleteComment(commentId: string): Promise<FormState> {
     .select({
       id: reviewComments.id,
       userId: reviewComments.userId,
+      photoId: reviewComments.photoId,
+      audioId: reviewComments.audioId,
       reviewUserId: reviews.userId,
       slug: places.slug,
     })
@@ -123,6 +159,7 @@ export async function deleteComment(commentId: string): Promise<FormState> {
   if (!allowed) return { ok: false, error: NOT_YOURS };
 
   await db.delete(reviewComments).where(eq(reviewComments.id, comment.id));
+  await deleteCommentMedia(comment);
 
   revalidatePath(`/lugares/${comment.slug}`);
   return { ok: true };
@@ -148,6 +185,8 @@ export async function toggleCommentLike(
         id: postComments.id,
         userId: postComments.userId,
         body: postComments.body,
+        photoId: postComments.photoId,
+        audioId: postComments.audioId,
         postId: postComments.postId,
       })
       .from(postComments)
@@ -176,6 +215,8 @@ export async function toggleCommentLike(
         id: reviewComments.id,
         userId: reviewComments.userId,
         body: reviewComments.body,
+        photoId: reviewComments.photoId,
+        audioId: reviewComments.audioId,
         slug: places.slug,
         placeId: places.id,
       })
@@ -211,7 +252,13 @@ export async function toggleCommentLike(
  */
 async function notifyCommentLiked(opts: {
   kind: "review" | "post";
-  comment: { id: string; userId: string; body: string };
+  comment: {
+    id: string;
+    userId: string;
+    body: string;
+    photoId: string | null;
+    audioId: string | null;
+  };
   liker: { id: string; name: string; avatarId?: string | null };
   url: string;
   placeId: string | null;
@@ -222,7 +269,12 @@ async function notifyCommentLiked(opts: {
   try {
     const payload: PushPayload = {
       title: "E o narga?",
-      body: likeNotificationBody(opts.liker.name, opts.kind, opts.comment.body),
+      body: likeNotificationBody(
+        opts.liker.name,
+        opts.kind,
+        opts.comment.body,
+        commentMediaKind(opts.comment),
+      ),
       url: opts.url,
       icon: avatarIcon(opts.liker.avatarId),
       // Várias curtidas no mesmo comentário trocam o balão em vez de empilhar.

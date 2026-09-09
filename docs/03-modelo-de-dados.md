@@ -172,6 +172,8 @@ O mesmo desenho de `review_reactions` / `review_comments`, apontando pra `posts`
 
 Quem apaga um comentário: quem escreveu, quem postou ou admin (resolvido na query, com o `user_id` do post junto).
 
+Foto ou áudio no comentário (docs/08 #52, migration 0013), tanto em `post_comments` quanto em `review_comments`: `photo_id`, `photo_width`, `photo_height` (o mesmo storage de imagens, `{id}.webp` / `{id}.thumb.webp`, reprocessada em até 1200 px) e `audio_id`, `audio_ext`, `audio_duration_ms`, `audio_peaks` (o mesmo storage e as mesmas regras do áudio de post). Um anexo por comentário — foto e áudio juntos a action recusa. `body` continua `NOT NULL`: comentário só de anexo grava `""` (mudar a coluna pra nula exigiria recriar a tabela no SQLite, e o `DROP TABLE` com FK ligada dispararia o cascade nas curtidas). Os arquivos são apagados junto com o comentário, e também quando o post ou a avaliação some (o cascade do banco não sabe de disco: `deletePost`/`deleteReview` recolhem os ids antes).
+
 ### review_comment_likes e post_comment_likes
 
 Curtida em comentário (migration 0010): só "curtir", sem emoji. PK `(comment_id, user_id)`, `created_at`; cascade no comentário e na pessoa. A contagem e o "eu curti" saem numa query agrupada junto com a lista de comentários (`src/lib/queries/comment-likes.ts`), nunca por comentário.

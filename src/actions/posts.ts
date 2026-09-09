@@ -16,11 +16,18 @@ import {
   type AudioExt,
 } from "@/lib/audio-storage";
 import { assertUser } from "@/lib/auth/guards";
+import {
+  commentMediaValues,
+  deleteCommentMedia,
+  EMPTY_COMMENT_MEDIA,
+  hasCommentMedia,
+  saveCommentMedia,
+} from "@/lib/comment-media";
 import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
 import { notifications, places, postComments, postReactions, posts } from "@/lib/db/schema";
 import { notifyMentions } from "@/lib/notify-mentions";
-import { commentNotificationBody, postInputSchema } from "@/lib/posts";
+import { commentMediaKind, commentNotificationBody, postInputSchema } from "@/lib/posts";
 import { avatarIcon, isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isReactionEmoji } from "@/lib/reviews";
@@ -41,6 +48,8 @@ const PHOTO_THUMB_SIZE = 400;
 
 /** 20 posts por hora por pessoa. Não é moderação: é pra ninguém entupir o feed sem querer. */
 const POST_RATE_LIMIT = { limit: 20, windowMs: 60 * 60 * 1000 };
+/** Comentário com foto ou áudio: 30 por hora por pessoa (texto não conta). */
+const COMMENT_MEDIA_RATE_LIMIT = { limit: 30, windowMs: 60 * 60 * 1000 };
 
 // Módulo "use server": só exporta função async, então as mensagens ficam privadas.
 const EMPTY_POST = "Manda uma foto, um vídeo, um áudio ou escreve alguma coisa.";
@@ -255,7 +264,10 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
   redirect("/feed");
 }
 
-/** Apaga o post e a foto/vídeo/áudio dele. Só quem postou, ou admin. */
+/**
+ * Apaga o post e a foto/vídeo/áudio dele — e os anexos dos comentários, que somem do
+ * banco pelo cascade mas não do disco. Só quem postou, ou admin.
+ */
 export async function deletePost(postId: string): Promise<FormState> {
   const { user } = await assertUser();
   if (typeof postId !== "string" || postId === "") {
@@ -280,11 +292,17 @@ export async function deletePost(postId: string): Promise<FormState> {
     return { ok: false, error: NOT_YOURS };
   }
 
+  const attachments = await db
+    .select({ photoId: postComments.photoId, audioId: postComments.audioId })
+    .from(postComments)
+    .where(eq(postComments.postId, post.id));
+
   await db.delete(posts).where(eq(posts.id, post.id));
   // Só depois de a linha sumir é que os arquivos viram lixo.
   if (post.photoId) await deleteImage(post.photoId);
   if (post.videoId) await deleteVideo(post.videoId);
   if (post.audioId) await deleteAudio(post.audioId);
+  await deleteCommentMedia(attachments);
 
   revalidatePath("/feed");
   return { ok: true };
@@ -293,13 +311,14 @@ export async function deletePost(postId: string): Promise<FormState> {
 // --- Reações e comentários -----------------------------------------------------
 
 const BAD_EMOJI = "Esse emoji não existe por aqui.";
-const COMMENT_BODY_ERROR = `Escreve alguma coisa (até ${COMMENT_MAX} caracteres).`;
+const COMMENT_BODY_ERROR = `Escreve alguma coisa (até ${COMMENT_MAX} caracteres), ou manda uma foto ou um áudio.`;
 const COMMENT_NOT_FOUND = "Comentário não encontrado.";
 const COMMENT_NOT_YOURS = "Esse comentário não é seu.";
 
+// "Tem texto ou anexo" é regra da action: o texto sozinho pode vir vazio (docs/08 #52).
 const commentSchema = z.object({
   postId: z.string().trim().min(1, POST_NOT_FOUND),
-  body: z.string().trim().min(1, COMMENT_BODY_ERROR).max(COMMENT_MAX, COMMENT_BODY_ERROR),
+  body: z.string().trim().max(COMMENT_MAX, COMMENT_BODY_ERROR),
 });
 
 async function findPost(postId: string) {
@@ -321,10 +340,11 @@ async function notifyPostAuthor(
   post: { id: string; userId: string; placeId: string | null },
   commenter: { id: string; name: string; avatarId: string | null },
   comment: string,
+  media: ReturnType<typeof commentMediaKind>,
 ) {
   const payload: PushPayload = {
     title: "E o narga?",
-    body: commentNotificationBody(commenter.name, comment),
+    body: commentNotificationBody(commenter.name, comment, media),
     url: `/feed#post-${post.id}`,
     icon: avatarIcon(commenter.avatarId),
     // Vários comentários no mesmo post trocam o balão em vez de empilhar.
@@ -384,7 +404,11 @@ export async function togglePostReaction(
   return { ok: true, reacted: !existing, count: Number(counted[0]?.count ?? 0) };
 }
 
-/** Comenta num post. Qualquer membro comenta qualquer post (nada é privado). */
+/**
+ * Comenta num post: texto, foto ou áudio (docs/08 #52). Qualquer membro comenta
+ * qualquer post (nada é privado). O anexo passa pelas mesmas regras da mídia de post
+ * (`src/lib/comment-media.ts`).
+ */
 export async function addPostComment(_prev: FormState, formData: FormData): Promise<FormState> {
   const { user } = await assertUser();
 
@@ -394,16 +418,32 @@ export async function addPostComment(_prev: FormState, formData: FormData): Prom
   });
   if (!parsed.success) return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) };
   const data = parsed.data;
+  const withMedia = hasCommentMedia(formData);
+  if (!data.body && !withMedia) return { ok: false, fieldErrors: { body: COMMENT_BODY_ERROR } };
 
   const post = await findPost(data.postId);
   if (!post) return { ok: false, error: POST_NOT_FOUND };
 
-  await db.insert(postComments).values({
-    id: nanoid(12),
-    postId: post.id,
-    userId: user.id,
-    body: data.body,
-  });
+  if (withMedia && !checkRateLimit(`comment-media:${user.id}`, COMMENT_MEDIA_RATE_LIMIT).ok) {
+    return { ok: false, error: TOO_MANY };
+  }
+  const saved = withMedia ? await saveCommentMedia(formData) : null;
+  if (saved && !saved.ok) return { ok: false, error: saved.error };
+  const media = saved ? saved.media : EMPTY_COMMENT_MEDIA;
+
+  try {
+    await db.insert(postComments).values({
+      id: nanoid(12),
+      postId: post.id,
+      userId: user.id,
+      body: data.body,
+      ...commentMediaValues(media),
+    });
+  } catch {
+    // Sem linha no banco o anexo é lixo: apaga em vez de deixar órfão.
+    await deleteCommentMedia(commentMediaValues(media));
+    return { ok: false, error: SAVE_FAILED };
+  }
 
   // Comentar no próprio post não apita. E push que falhar não derruba o comentário:
   // ele já está gravado, o aviso é bônus.
@@ -413,28 +453,31 @@ export async function addPostComment(_prev: FormState, formData: FormData): Prom
         post,
         { id: user.id, name: user.name, avatarId: user.avatarId },
         data.body,
+        commentMediaKind(commentMediaValues(media)),
       );
     } catch {
       // Sem aviso desta vez; o comentário continua no feed.
     }
   }
   // Menções no comentário: quem foi citado leva push, menos o dono do post (que já levou).
-  await notifyMentions({
-    text: data.body,
-    author: { id: user.id, name: user.name, avatarId: user.avatarId },
-    where: "comment",
-    url: `/feed#post-${post.id}`,
-    exclude: post.userId !== user.id ? [post.userId] : [],
-    placeId: post.placeId,
-  });
+  if (data.body) {
+    await notifyMentions({
+      text: data.body,
+      author: { id: user.id, name: user.name, avatarId: user.avatarId },
+      where: "comment",
+      url: `/feed#post-${post.id}`,
+      exclude: post.userId !== user.id ? [post.userId] : [],
+      placeId: post.placeId,
+    });
+  }
 
   revalidatePath("/feed");
   return { ok: true };
 }
 
 /**
- * Apaga o comentário. Quem escreveu, quem postou (é a thread do post) ou um admin
- * (docs/05 — Permissões).
+ * Apaga o comentário e o anexo dele. Quem escreveu, quem postou (é a thread do post)
+ * ou um admin (docs/05 — Permissões).
  */
 export async function deletePostComment(commentId: string): Promise<FormState> {
   const { user } = await assertUser();
@@ -446,6 +489,8 @@ export async function deletePostComment(commentId: string): Promise<FormState> {
     .select({
       id: postComments.id,
       userId: postComments.userId,
+      photoId: postComments.photoId,
+      audioId: postComments.audioId,
       postUserId: posts.userId,
     })
     .from(postComments)
@@ -461,6 +506,7 @@ export async function deletePostComment(commentId: string): Promise<FormState> {
   if (!allowed) return { ok: false, error: COMMENT_NOT_YOURS };
 
   await db.delete(postComments).where(eq(postComments.id, comment.id));
+  await deleteCommentMedia(comment);
 
   revalidatePath("/feed");
   return { ok: true };

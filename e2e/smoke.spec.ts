@@ -574,6 +574,43 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await expect(caixa).toHaveValue("@Admin: bora e @Admin: ");
   await cardTexto.getByRole("button", { name: "Cancelar" }).click();
 
+  // --- Comentário com foto e comentário só de áudio (docs/08 #52) ---------------
+  await cardTexto.getByRole("button", { name: "Comentar" }).click();
+  await expect(cardTexto.getByLabel("Seu comentário")).toBeVisible();
+  const fotoComentario = await sharp({
+    create: { width: 160, height: 120, channels: 3, background: "#f4b942" },
+  })
+    .png()
+    .toBuffer();
+  await cardTexto
+    .locator('input[name="photo"]')
+    .setInputFiles({ name: "olha.png", mimeType: "image/png", buffer: fotoComentario });
+  await expect(cardTexto.getByRole("img", { name: "Prévia da foto" })).toBeVisible();
+  await cardTexto.getByLabel("Seu comentário").fill("Olha isso");
+  await cardTexto.getByRole("button", { name: "Enviar" }).click();
+  // A foto de verdade (servida pela rota) chega quando a página revalida.
+  const fotoNoComentario = cardTexto.locator('img[alt="Foto de Admin"][src^="/api/uploads/"]');
+  await expect(fotoNoComentario).toBeVisible({ timeout: 30_000 });
+  await expect(cardTexto.locator("p", { hasText: "Olha isso" })).toBeVisible();
+
+  // Áudio gravado na caixa de comentário, sem texto nenhum.
+  await cardTexto.getByRole("button", { name: "Gravar áudio" }).click();
+  await expect(cardTexto.getByRole("group", { name: "Gravando áudio" })).toBeVisible();
+  const pararComentario = cardTexto.getByRole("button", { name: "Parar gravação" });
+  await expect(pararComentario).toBeEnabled({ timeout: 15_000 });
+  await page.waitForTimeout(1500);
+  await pararComentario.click();
+  await expect(cardTexto.getByRole("group", { name: "Prévia do áudio" })).toBeVisible();
+  await cardTexto.getByRole("button", { name: "Enviar" }).click();
+  const audioNoComentario = cardTexto.getByRole("group", { name: "Áudio de Admin" });
+  await expect(audioNoComentario).toBeVisible({ timeout: 30_000 });
+  expect((await audioNoComentario.locator("audio").getAttribute("src")) ?? "").toMatch(
+    /^\/api\/audios\/[A-Za-z0-9_-]+\.(webm|m4a|ogg)$/,
+  );
+  await expect(audioNoComentario.getByText(/^0:0[1-9]$/)).toBeVisible();
+  await shot(page, "20c-comentario-com-foto-e-audio");
+  await cardTexto.getByRole("button", { name: "Cancelar" }).click();
+
   // A reação vira linha nas novidades e tudo sobrevive a um reload.
   await page.reload();
   await expect(cardTexto.getByRole("button", { name: "Reagir com 🔥 (1)" })).toHaveAttribute(
@@ -584,6 +621,8 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await expect(
     cardTexto.getByRole("button", { name: "Curtir comentário de Admin (1)" }),
   ).toBeVisible();
+  await expect(cardTexto.locator('img[alt="Foto de Admin"][src^="/api/uploads/"]')).toBeVisible();
+  await expect(cardTexto.getByRole("group", { name: "Áudio de Admin" })).toBeVisible();
   await expect(page.getByText(/Admin reagiu .*no post de Admin/)).toBeVisible();
 
   // --- Post 2: só foto, com a posição marcada no mapa -----------------------
@@ -635,11 +674,16 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await publicar2.click();
 
   await page.waitForURL(/\/feed$/);
-  const foto = page.getByRole("img", { name: "Foto de Admin" }).first();
+  // Dois cards têm "Foto de Admin" agora (este post e o comentário com foto no post de
+  // texto): o da foto é o que não carrega o texto do primeiro post.
+  const cardFoto = page
+    .locator("article")
+    .filter({ has: page.getByRole("img", { name: "Foto de Admin" }) })
+    .filter({ hasNotText: "Tô aqui e tem narga" });
+  const foto = cardFoto.getByRole("img", { name: "Foto de Admin" });
   await expect(foto).toBeVisible({ timeout: 30_000 });
   await expect(foto).toHaveAttribute("src", /\/api\/uploads\/[A-Za-z0-9_-]+/);
 
-  const cardFoto = page.locator("article").filter({ has: foto });
   // Sem lugar cadastrado, a linha "de onde" leva pro Maps por coordenada.
   await expect(cardFoto.locator('a[href^="https://www.google.com/maps/search/"]')).toBeVisible();
   await shot(page, "22-feed-com-posts");
@@ -803,7 +847,8 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   }
   await apagar.click();
 
-  await expect(page.getByRole("img", { name: "Foto de Admin" })).toHaveCount(0, {
+  // Sobra só a foto do comentário no post de texto.
+  await expect(page.getByRole("img", { name: "Foto de Admin" })).toHaveCount(1, {
     timeout: 30_000,
   });
   // O post de texto continua lá; o aviso de flop da foto foi junto com ela.

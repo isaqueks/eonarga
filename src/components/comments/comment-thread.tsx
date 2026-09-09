@@ -1,7 +1,15 @@
 "use client";
 
-import { Heart, MessageCircle, Reply, Trash2 } from "lucide-react";
-import { useActionState, useOptimistic, useRef, useState, useTransition } from "react";
+import { Camera, Heart, MessageCircle, Mic, Reply, Trash2, X } from "lucide-react";
+import {
+  useActionState,
+  useEffect,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+  type ChangeEvent,
+} from "react";
 
 import { addComment, deleteComment, toggleCommentLike } from "@/actions/comments";
 import { EMPTY_FORM_STATE } from "@/actions/form-state";
@@ -11,11 +19,27 @@ import {
   MentionTextarea,
   type MentionTextareaHandle,
 } from "@/components/mentions/mention-textarea";
+import { AudioPlayer } from "@/components/posts/audio-player";
+import {
+  analyzeAudioFile,
+  AudioRecorder,
+  canRecordAudio,
+  type Recording,
+} from "@/components/posts/audio-recorder";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
-import { COMMENT_MAX } from "@/lib/constants";
+import { AUDIO_MAX_BYTES, COMMENT_MAX, PHOTO_MAX_BYTES } from "@/lib/constants";
 import { mentionToken } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
+
+import { CommentPhoto, type CommentPhotoView } from "./comment-photo";
+
+/** O áudio de um comentário, pro player. */
+export interface CommentAudioView {
+  url: string;
+  durationMs: number;
+  peaks: number[] | null;
+}
 
 /**
  * Um comentário pronto pra tela. O "há x" vem calculado do servidor (igual ao card):
@@ -23,7 +47,12 @@ import { cn } from "@/lib/utils";
  */
 export interface CommentView {
   id: string;
+  /** Texto puro; vazio quando o comentário é só foto ou só áudio (docs/08 #52). */
   body: string;
+  /** A foto do comentário, quando tem. */
+  photo: CommentPhotoView | null;
+  /** O áudio do comentário, quando tem. */
+  audio: CommentAudioView | null;
   when: string;
   authorName: string;
   authorAvatarId: string | null;
@@ -46,6 +75,8 @@ const COPY = {
     confirm: "Apagar essa resposta? Não dá pra desfazer.",
     deleteLabel: (author: string) => `Apagar resposta de ${author}`,
     likeLabel: (author: string) => `Curtir resposta de ${author}`,
+    photoLabel: "Foto da resposta",
+    audioLabel: "Áudio da resposta",
   },
   post: {
     field: "postId",
@@ -55,6 +86,8 @@ const COPY = {
     confirm: "Apagar esse comentário? Não dá pra desfazer.",
     deleteLabel: (author: string) => `Apagar comentário de ${author}`,
     likeLabel: (author: string) => `Curtir comentário de ${author}`,
+    photoLabel: "Foto do comentário",
+    audioLabel: "Áudio do comentário",
   },
 } as const;
 
@@ -63,13 +96,45 @@ const PREVIEW = 3;
 
 const PENDING_ID = "__pending__";
 
+const PHOTO_TOO_BIG = "Foto grande demais (máximo 10 MB).";
+const AUDIO_TOO_BIG = "Áudio grande demais (máximo 20 MB).";
+
 /** "Responder" e "Apagar": texto pequeno, lado a lado, embaixo do comentário. */
 const ACTION_CLASS =
   "hover:text-foreground focus-visible:ring-ring/50 flex h-8 items-center gap-1 rounded-md px-1 outline-none focus-visible:ring-3 disabled:opacity-60";
 
+/** Os botões "📷" e "🎤" da caixa: redondos, do tamanho do dedo. */
+const ATTACH_CLASS =
+  "text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-3 disabled:opacity-60";
+
+/**
+ * O anexo escolhido, antes de enviar (docs/08 #52). A foto fica no próprio input
+ * (o FormData a leva sozinho); a gravação não passa por input e vai no FormData na
+ * hora de enviar; o áudio da galeria fica no input dele.
+ */
+type Attachment =
+  | { kind: "photo"; url: string }
+  | {
+      kind: "audio";
+      url: string;
+      durationMs: number;
+      peaks: number[] | null;
+      /** A gravação do app; null quando o áudio veio do input da galeria. */
+      recording: Recording | null;
+    };
+
+/** O que a lista mostra em cinza enquanto o servidor grava. */
+interface PendingComment {
+  body: string;
+  photo: CommentPhotoView | null;
+  audio: CommentAudioView | null;
+}
+
 /**
  * Thread curta de uma avaliação ou de um post. Otimista: o comentário aparece cinza
  * enquanto o servidor grava e é substituído pelo de verdade quando a página revalida.
+ * Comentário pode ser texto, foto ou áudio (gravado ou da galeria, quando o navegador
+ * não grava), um anexo por vez.
  */
 export function CommentThread({
   target,
@@ -88,27 +153,47 @@ export function CommentThread({
   const del = target.type === "review" ? deleteComment : deletePostComment;
 
   const [state, formAction, sending] = useActionState(add, EMPTY_FORM_STATE);
-  const [optimistic, addOptimistic] = useOptimistic(comments, (current, body: string) => [
-    ...current,
-    {
-      id: PENDING_ID,
-      body,
-      when: "enviando...",
-      authorName: "você",
-      authorAvatarId: null,
-      canDelete: false,
-      likes: 0,
-      likedByMe: false,
-    },
-  ]);
+  const [optimistic, addOptimistic] = useOptimistic(
+    comments,
+    (current, pending: PendingComment) => [
+      ...current,
+      {
+        id: PENDING_ID,
+        body: pending.body,
+        photo: pending.photo,
+        audio: pending.audio,
+        when: "enviando...",
+        authorName: "você",
+        authorAvatarId: null,
+        canDelete: false,
+        likes: 0,
+        likedByMe: false,
+      },
+    ],
+  );
 
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState("");
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [removing, startRemoving] = useTransition();
   // Erro de apagar ou de curtir: um lugar só, embaixo da lista.
   const [actionError, setActionError] = useState<string | null>(null);
   const textareaRef = useRef<MentionTextareaHandle>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  // URLs de prévia que o navegador criou. A do comentário enviado fica viva até a
+  // página revalidar (o otimista ainda mostra a foto); tudo é devolvido ao desmontar.
+  const urlsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    const urls = urlsRef.current;
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+    };
+  }, []);
 
   const hidden = expanded ? 0 : Math.max(0, optimistic.length - PREVIEW);
   const visible = hidden > 0 ? optimistic.slice(-PREVIEW) : optimistic;
@@ -139,6 +224,85 @@ export function CommentThread({
     });
   }
 
+  function keepUrl(url: string): string {
+    urlsRef.current.push(url);
+    return url;
+  }
+
+  /** Tira o anexo da caixa (e dos inputs), sem mexer no texto. */
+  function clearAttachment() {
+    if (photoInputRef.current) photoInputRef.current.value = "";
+    if (audioInputRef.current) audioInputRef.current.value = "";
+    setAttachment(null);
+    setMediaError(null);
+  }
+
+  function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0] ?? null;
+    if (!file) return;
+    if (audioInputRef.current) audioInputRef.current.value = "";
+    if (file.size > PHOTO_MAX_BYTES) {
+      input.value = "";
+      setAttachment(null);
+      setMediaError(PHOTO_TOO_BIG);
+      return;
+    }
+    setMediaError(null);
+    setAttachment({ kind: "photo", url: keepUrl(URL.createObjectURL(file)) });
+  }
+
+  /** Áudio da galeria: só quando o navegador não grava. Duração e desenho vêm depois. */
+  function handleAudioChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0] ?? null;
+    if (!file) return;
+    if (photoInputRef.current) photoInputRef.current.value = "";
+    if (file.size > AUDIO_MAX_BYTES) {
+      input.value = "";
+      setAttachment(null);
+      setMediaError(AUDIO_TOO_BIG);
+      return;
+    }
+    setMediaError(null);
+    const url = keepUrl(URL.createObjectURL(file));
+    setAttachment({ kind: "audio", url, durationMs: 0, peaks: null, recording: null });
+    void analyzeAudioFile(file).then((meta) => {
+      if (audioInputRef.current?.files?.[0] !== file) return;
+      setAttachment({ kind: "audio", url, ...meta, recording: null });
+    });
+  }
+
+  function startRecording() {
+    if (!canRecordAudio()) {
+      audioInputRef.current?.click();
+      return;
+    }
+    clearAttachment();
+    setRecording(true);
+  }
+
+  function finishRecording(next: Recording) {
+    setRecording(false);
+    keepUrl(next.url);
+    setAttachment({
+      kind: "audio",
+      url: next.url,
+      durationMs: next.durationMs,
+      peaks: next.peaks,
+      recording: next,
+    });
+  }
+
+  function closeForm() {
+    setOpen(false);
+    setDraft("");
+    setRecording(false);
+    clearAttachment();
+  }
+
+  const canSend = !sending && !recording && (draft.trim() !== "" || attachment !== null);
+
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       {hidden > 0 ? (
@@ -162,16 +326,29 @@ export function CommentThread({
                 className={cn("flex items-start gap-2", pending && "opacity-60")}
               >
                 <UserAvatar name={comment.authorName} avatarId={comment.authorAvatarId} size="sm" />
-                <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <p className="text-muted-foreground flex flex-wrap items-baseline gap-x-2 text-xs">
                     <span className="text-foreground font-semibold">{comment.authorName}</span>
                     {comment.when ? <span>{comment.when}</span> : null}
                   </p>
-                  <p className="text-[0.9375rem] leading-snug break-words whitespace-pre-wrap">
-                    <MentionText text={comment.body} />
-                  </p>
+                  {comment.body ? (
+                    <p className="-mt-1 text-[0.9375rem] leading-snug break-words whitespace-pre-wrap">
+                      <MentionText text={comment.body} />
+                    </p>
+                  ) : null}
+                  {comment.photo ? (
+                    <CommentPhoto photo={comment.photo} authorName={comment.authorName} />
+                  ) : null}
+                  {comment.audio ? (
+                    <AudioPlayer
+                      src={comment.audio.url}
+                      durationMs={comment.audio.durationMs}
+                      peaks={comment.audio.peaks}
+                      label={`Áudio de ${comment.authorName}`}
+                    />
+                  ) : null}
                   {actions ? (
-                    <div className="text-muted-foreground -mb-1 -ml-1 flex items-center gap-2 text-xs font-medium">
+                    <div className="text-muted-foreground -mt-1 -mb-1 -ml-1 flex items-center gap-2 text-xs font-medium">
                       {canReply ? (
                         <button
                           type="button"
@@ -224,14 +401,67 @@ export function CommentThread({
         <form
           action={(formData) => {
             const body = String(formData.get("body") ?? "").trim();
-            if (body === "") return;
-            addOptimistic(body);
+            if (body === "" && !attachment) return;
+            // A gravação do app não passa por input: entra aqui, como se fosse o `audio`.
+            if (attachment?.kind === "audio" && attachment.recording) {
+              const { blob, ext } = attachment.recording;
+              formData.set("audio", blob, `gravacao.${ext}`);
+            }
+            addOptimistic({
+              body,
+              photo:
+                attachment?.kind === "photo" ? { url: attachment.url, width: 0, height: 0 } : null,
+              audio:
+                attachment?.kind === "audio"
+                  ? {
+                      url: attachment.url,
+                      durationMs: attachment.durationMs,
+                      peaks: attachment.peaks,
+                    }
+                  : null,
+            });
             setDraft("");
+            clearAttachment();
             formAction(formData);
           }}
           className="flex flex-col gap-1.5"
         >
           <input type="hidden" name={copy.field} value={target.id} />
+          {/* `capture` fora de propósito: no celular o navegador oferece câmera ou galeria. */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            name="photo"
+            accept="image/*"
+            className="sr-only"
+            tabIndex={-1}
+            aria-label={copy.photoLabel}
+            onChange={handlePhotoChange}
+          />
+          <input
+            ref={audioInputRef}
+            type="file"
+            name="audio"
+            accept="audio/*"
+            className="sr-only"
+            tabIndex={-1}
+            aria-label={copy.audioLabel}
+            onChange={handleAudioChange}
+          />
+          <input
+            type="hidden"
+            name="audioDurationMs"
+            value={attachment?.kind === "audio" ? attachment.durationMs : ""}
+          />
+          <input
+            type="hidden"
+            name="audioPeaks"
+            value={
+              attachment?.kind === "audio" && attachment.peaks
+                ? JSON.stringify(attachment.peaks)
+                : ""
+            }
+          />
           <MentionTextarea
             handleRef={textareaRef}
             name="body"
@@ -244,18 +474,37 @@ export function CommentThread({
             aria-invalid={state.fieldErrors?.body ? true : undefined}
             className="min-h-16 text-[0.9375rem]"
           />
-          {(state.fieldErrors?.body ?? state.error) ? (
+
+          {recording ? (
+            <AudioRecorder onDone={finishRecording} onCancel={() => setRecording(false)} />
+          ) : attachment?.kind === "photo" ? (
+            <AttachmentPreview onRemove={clearAttachment} removeLabel="Tirar foto">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attachment.url}
+                alt="Prévia da foto"
+                className="bg-muted max-h-40 max-w-full rounded-lg object-contain"
+              />
+            </AttachmentPreview>
+          ) : attachment?.kind === "audio" ? (
+            <AttachmentPreview onRemove={clearAttachment} removeLabel="Tirar áudio">
+              <AudioPlayer
+                src={attachment.url}
+                durationMs={attachment.durationMs}
+                peaks={attachment.peaks}
+                label="Prévia do áudio"
+                className="flex-1"
+              />
+            </AttachmentPreview>
+          ) : null}
+
+          {(mediaError ?? state.fieldErrors?.body ?? state.error) ? (
             <p role="alert" className="text-destructive text-xs">
-              {state.fieldErrors?.body ?? state.error}
+              {mediaError ?? state.fieldErrors?.body ?? state.error}
             </p>
           ) : null}
           <div className="flex items-center gap-2">
-            <Button
-              type="submit"
-              size="lg"
-              className="h-11 px-4"
-              disabled={sending || draft.trim() === ""}
-            >
+            <Button type="submit" size="lg" className="h-11 px-4" disabled={!canSend}>
               {sending ? "Enviando..." : "Enviar"}
             </Button>
             <Button
@@ -263,13 +512,30 @@ export function CommentThread({
               variant="ghost"
               size="lg"
               className="h-11 px-4"
-              onClick={() => {
-                setOpen(false);
-                setDraft("");
-              }}
+              onClick={closeForm}
             >
               Cancelar
             </Button>
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={recording}
+                aria-label="Anexar foto"
+                className={ATTACH_CLASS}
+              >
+                <Camera className="size-5" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={recording}
+                aria-label="Gravar áudio"
+                className={ATTACH_CLASS}
+              >
+                <Mic className="size-5" aria-hidden />
+              </button>
+            </div>
           </div>
         </form>
       ) : (
@@ -284,6 +550,31 @@ export function CommentThread({
           {copy.cta}
         </Button>
       )}
+    </div>
+  );
+}
+
+/** A prévia do anexo na caixa, com o "×" pra tirar. */
+function AttachmentPreview({
+  children,
+  onRemove,
+  removeLabel,
+}: {
+  children: React.ReactNode;
+  onRemove: () => void;
+  removeLabel: string;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      {children}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={removeLabel}
+        className={cn(ATTACH_CLASS, "hover:text-destructive")}
+      >
+        <X className="size-5" aria-hidden />
+      </button>
     </div>
   );
 }

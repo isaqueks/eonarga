@@ -82,12 +82,45 @@ export function formatLatLng(lat: number, lng: number): string {
 /** Tamanho do trecho do comentário que vai no push: o balão do celular corta em ~2 linhas. */
 export const COMMENT_PUSH_EXCERPT_MAX = 90;
 
+/** O que um comentário tem além de texto (docs/08 #52): uma foto ou um áudio, ou nada. */
+export type CommentMediaKind = "photo" | "audio" | null;
+
+/** O tipo de anexo a partir das colunas do comentário. Foto e áudio juntos não existem. */
+export function commentMediaKind(row: {
+  photoId: string | null;
+  audioId: string | null;
+}): CommentMediaKind {
+  return row.photoId ? "photo" : row.audioId ? "audio" : null;
+}
+
+const MEDIA_EMOJI: Record<NonNullable<CommentMediaKind>, string> = { photo: "📷", audio: "🎤" };
+const MEDIA_LABEL: Record<NonNullable<CommentMediaKind>, string> = {
+  photo: "Foto",
+  audio: "Áudio",
+};
+
+/**
+ * O trecho do comentário que vai no push, como o WhatsApp faz na lista de conversas:
+ * texto entre aspas; só foto vira "📷 Foto", só áudio "🎤 Áudio"; foto com legenda
+ * fica "📷 “legenda”".
+ */
+export function commentPushExcerpt(comment: string, media: CommentMediaKind = null): string {
+  const text = comment.trim();
+  if (!media) return `“${pushExcerpt(text)}”`;
+  if (!text) return `${MEDIA_EMOJI[media]} ${MEDIA_LABEL[media]}`;
+  return `${MEDIA_EMOJI[media]} “${pushExcerpt(text)}”`;
+}
+
 /**
  * Corpo do push "fulano comentou no seu post": o comentário vira uma linha só e,
  * passando do limite, é cortado com reticências.
  */
-export function commentNotificationBody(commenterName: string, comment: string): string {
-  return `${commenterName} comentou no seu post: “${pushExcerpt(comment)}”`;
+export function commentNotificationBody(
+  commenterName: string,
+  comment: string,
+  media: CommentMediaKind = null,
+): string {
+  return `${commenterName} comentou no seu post: ${commentPushExcerpt(comment, media)}`;
 }
 
 /**
@@ -98,9 +131,10 @@ export function likeNotificationBody(
   likerName: string,
   where: "post" | "review",
   comment: string,
+  media: CommentMediaKind = null,
 ): string {
   const what = where === "post" ? "seu comentário" : "sua resposta";
-  return `${likerName} curtiu ${what}: “${pushExcerpt(comment)}”`;
+  return `${likerName} curtiu ${what}: ${commentPushExcerpt(comment, media)}`;
 }
 
 /** O comentário numa linha só e, passando do limite, cortado com reticências. */

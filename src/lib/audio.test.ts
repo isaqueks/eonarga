@@ -6,6 +6,7 @@ import {
   formatClock,
   parseDurationMs,
   parsePeaks,
+  parseStoredPeaks,
   recordingExt,
   resamplePeaks,
 } from "./audio";
@@ -84,6 +85,17 @@ describe("parsePeaks", () => {
     expect(parsePeaks(JSON.stringify(new Array(AUDIO_PEAKS_MAX).fill(0.5)))).toHaveLength(
       AUDIO_PEAKS_MAX,
     );
+  });
+});
+
+describe("parseStoredPeaks", () => {
+  it("lê a lista gravada no banco e ignora o que não é lista de números", () => {
+    expect(parseStoredPeaks("[0,0.5,1]")).toEqual([0, 0.5, 1]);
+    expect(parseStoredPeaks(null)).toBeNull();
+    expect(parseStoredPeaks("")).toBeNull();
+    expect(parseStoredPeaks("lixo")).toBeNull();
+    expect(parseStoredPeaks('["a"]')).toBeNull();
+    expect(parseStoredPeaks("{}")).toBeNull();
   });
 });
 

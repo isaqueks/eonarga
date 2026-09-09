@@ -539,6 +539,196 @@ describe("addPostComment", () => {
   });
 });
 
+describe("comentário com foto ou áudio (docs/08 #52)", () => {
+  const FIXTURES = path.resolve("e2e/fixtures");
+  const webm = () => fs.readFileSync(path.join(FIXTURES, "tiny.webm"));
+
+  function withFile(fields: Record<string, string>, name: string, file: File): FormData {
+    const fd = form(fields);
+    fd.set(name, file);
+    return fd;
+  }
+
+  it("foto com legenda: reprocessada em webp, na thread e no push como 📷 “legenda”", async () => {
+    const { listPosts } = await import("@/lib/queries/posts");
+    const id = await seedTextPost(); // post da Ana
+    await subscribe("ana-celular", ANA.id);
+
+    state.user = BIA;
+    expect(
+      await actions.addPostComment(
+        empty,
+        withFile({ postId: id, body: "olha isso" }, "photo", await photoFile()),
+      ),
+    ).toEqual({ ok: true });
+
+    const [comment] = await db.select().from(schema.postComments);
+    expect(comment).toMatchObject({
+      body: "olha isso",
+      photoWidth: 120,
+      photoHeight: 80,
+      audioId: null,
+    });
+    expect(comment.photoId).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    expect(fileExists(comment.photoId!, ".webp")).toBe(true);
+    expect(fileExists(comment.photoId!, ".thumb.webp")).toBe(true);
+
+    const [post] = await listPosts({ id: ANA.id, role: "member" });
+    expect(post.comments[0].photo).toEqual({
+      id: comment.photoId,
+      url: `/api/uploads/${comment.photoId}`,
+      thumbUrl: `/api/uploads/${comment.photoId}?v=thumb`,
+      width: 120,
+      height: 80,
+    });
+    expect(post.comments[0].audio).toBeNull();
+
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1] as string)).toMatchObject({
+      body: "Bia comentou no seu post: 📷 “olha isso”",
+    });
+  });
+
+  it("só foto, sem texto: body vazio e o push diz 📷 Foto", async () => {
+    const id = await seedTextPost();
+    await subscribe("ana-celular", ANA.id);
+
+    state.user = BIA;
+    expect(
+      await actions.addPostComment(empty, withFile({ postId: id }, "photo", await photoFile())),
+    ).toEqual({ ok: true });
+    expect((await db.select().from(schema.postComments))[0].body).toBe("");
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1] as string)).toMatchObject({
+      body: "Bia comentou no seu post: 📷 Foto",
+    });
+    // Sem texto não tem menção pra procurar: só o push de comentário saiu.
+    expect(webpush.sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("áudio gravado no app, com duração e forma de onda, e o push diz 🎤 Áudio", async () => {
+    const { listPosts } = await import("@/lib/queries/posts");
+    const id = await seedTextPost();
+    await subscribe("ana-celular", ANA.id);
+
+    state.user = BIA;
+    const fd = withFile(
+      { postId: id, audioDurationMs: "7400", audioPeaks: "[0,0.5,1]" },
+      "audio",
+      new File([new Uint8Array(webm())], "gravacao.webm", { type: "audio/webm;codecs=opus" }),
+    );
+    expect(await actions.addPostComment(empty, fd)).toEqual({ ok: true });
+
+    const [comment] = await db.select().from(schema.postComments);
+    expect(comment).toMatchObject({
+      body: "",
+      photoId: null,
+      audioExt: "webm",
+      audioDurationMs: 7400,
+      audioPeaks: "[0,0.5,1]",
+    });
+    expect(fs.existsSync(path.join(uploadDir, `${comment.audioId}.webm`))).toBe(true);
+
+    const [post] = await listPosts({ id: ANA.id, role: "member" });
+    expect(post.comments[0].audio).toEqual({
+      id: comment.audioId,
+      url: `/api/audios/${comment.audioId}.webm`,
+      ext: "webm",
+      durationMs: 7400,
+      peaks: [0, 0.5, 1],
+    });
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1] as string)).toMatchObject({
+      body: "Bia comentou no seu post: 🎤 Áudio",
+    });
+  });
+
+  it("recusa anexo que não é foto e comentário sem texto nem anexo, sem gravar nada", async () => {
+    const id = await seedTextPost();
+    const antes = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir).length : 0;
+
+    state.user = BIA;
+    const pdf = await photoFile(Buffer.from("%PDF-1.4 nem de longe uma foto"));
+    expect(await actions.addPostComment(empty, withFile({ postId: id }, "photo", pdf))).toEqual({
+      ok: false,
+      error: "Isso não é uma foto que eu reconheça.",
+    });
+    const vazio = await actions.addPostComment(empty, form({ postId: id, body: " " }));
+    expect(vazio.fieldErrors?.body).toBe(
+      "Escreve alguma coisa (até 500 caracteres), ou manda uma foto ou um áudio.",
+    );
+    // Anexo vazio (input sem arquivo) não conta como anexo.
+    const semArquivo = await actions.addPostComment(
+      empty,
+      withFile({ postId: id }, "photo", new File([], "nada.png", { type: "image/png" })),
+    );
+    expect(semArquivo.ok).toBe(false);
+
+    expect(await db.select().from(schema.postComments)).toHaveLength(0);
+    expect(fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir).length : 0).toBe(antes);
+  });
+
+  it("apagar o comentário apaga o anexo; apagar o post apaga os anexos dos comentários", async () => {
+    const id = await seedTextPost(); // post da Ana
+    state.user = BIA;
+    await actions.addPostComment(empty, withFile({ postId: id }, "photo", await photoFile()));
+    await actions.addPostComment(
+      empty,
+      withFile({ postId: id }, "audio", new File([new Uint8Array(webm())], "g.webm")),
+    );
+    const [comFoto, comAudio] = await db
+      .select()
+      .from(schema.postComments)
+      .orderBy(schema.postComments.createdAt);
+
+    expect(await actions.deletePostComment(comFoto.id)).toEqual({ ok: true });
+    expect(fileExists(comFoto.photoId!, ".webp")).toBe(false);
+    expect(fileExists(comFoto.photoId!, ".thumb.webp")).toBe(false);
+    expect(fileExists(comAudio.audioId!, ".webm")).toBe(true);
+
+    state.user = ANA;
+    expect(await actions.deletePost(id)).toEqual({ ok: true });
+    expect(await db.select().from(schema.postComments)).toHaveLength(0);
+    expect(fileExists(comAudio.audioId!, ".webm")).toBe(false);
+  });
+
+  it("curtir um comentário só de foto apita 📷 Foto", async () => {
+    const commentActions = await import("@/actions/comments");
+    clearAllRateLimits();
+    await subscribe("bia-celular", BIA.id);
+    const id = await seedTextPost();
+    state.user = BIA;
+    await actions.addPostComment(empty, withFile({ postId: id }, "photo", await photoFile()));
+    const [comment] = await db.select().from(schema.postComments);
+    webpush.sendNotification.mockClear();
+
+    state.user = ADMIN;
+    expect(await commentActions.toggleCommentLike("post", comment.id)).toMatchObject({
+      ok: true,
+      liked: true,
+    });
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1] as string)).toMatchObject({
+      body: `${ADMIN.name} curtiu seu comentário: 📷 Foto`,
+    });
+  });
+
+  it("para em 30 comentários com anexo por hora; texto segue passando", async () => {
+    const id = await seedTextPost();
+    state.user = BIA;
+    for (let i = 0; i < 30; i++) {
+      const result = await actions.addPostComment(
+        empty,
+        withFile({ postId: id }, "photo", await photoFile()),
+      );
+      expect(result, `anexo ${i + 1}`).toEqual({ ok: true });
+    }
+    expect(
+      await actions.addPostComment(empty, withFile({ postId: id }, "photo", await photoFile())),
+    ).toEqual({ ok: false, error: "Calma, influencer." });
+    expect(await actions.addPostComment(empty, form({ postId: id, body: "texto passa" }))).toEqual({
+      ok: true,
+    });
+    expect(await db.select().from(schema.postComments)).toHaveLength(31);
+  });
+});
+
 describe("deletePostComment", () => {
   /** Comentário da Bia no post da Ana. Devolve o id do comentário. */
   async function seedComment(): Promise<string> {

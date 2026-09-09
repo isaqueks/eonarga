@@ -36,6 +36,16 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
   const comments: CommentView[] = post.comments.map((comment) => ({
     id: comment.id,
     body: comment.body,
+    photo: comment.photo
+      ? { url: comment.photo.url, width: comment.photo.width, height: comment.photo.height }
+      : null,
+    audio: comment.audio
+      ? {
+          url: comment.audio.url,
+          durationMs: comment.audio.durationMs,
+          peaks: comment.audio.peaks,
+        }
+      : null,
     when: relativeFromNow(comment.createdAt),
     authorName: comment.author.name,
     authorAvatarId: comment.author.avatarId,
