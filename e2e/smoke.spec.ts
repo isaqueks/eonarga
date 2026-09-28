@@ -629,18 +629,21 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await page.getByText("📸 Postar").click();
   await expect(page).toHaveURL(/\/feed\/novo$/);
 
-  const fotoPost = await sharp({
-    create: { width: 200, height: 150, channels: 3, background: "#8fd3b0" },
-  })
-    .png()
+  // Uma foto "de celular": 2600×1950 de ruído em JPEG, uns 3 MB. O aparelho encolhe pra
+  // 1600 px antes de subir (docs/08 #54): o POST tem que ir bem menor que o arquivo.
+  const ruido = Buffer.alloc(2600 * 1950 * 3);
+  for (let i = 0; i < ruido.length; i++) ruido[i] = (i * 2654435761) >>> 24;
+  const fotoPost = await sharp(ruido, { raw: { width: 2600, height: 1950, channels: 3 } })
+    .jpeg({ quality: 80 })
     .toBuffer();
+  expect(fotoPost.byteLength).toBeGreaterThan(1024 * 1024);
 
   // O input só reage depois da hidratação; se o primeiro `change` cair antes, repete.
   const tirar = page.getByRole("button", { name: "Tirar" });
   for (let attempt = 0; attempt < 3; attempt++) {
     await page
       .locator('input[name="photo"]')
-      .setInputFiles({ name: "post.png", mimeType: "image/png", buffer: fotoPost });
+      .setInputFiles({ name: "post.jpg", mimeType: "image/jpeg", buffer: fotoPost });
     try {
       await expect(tirar).toBeVisible({ timeout: 5_000 });
       break;
@@ -670,10 +673,20 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
     }
   }
   await expect(publicar2).toBeEnabled();
+  await expect(page.getByText("Preparando a foto…")).toHaveCount(0);
   await shot(page, "21-postar-foto");
+  const envios: import("@playwright/test").Request[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/feed\/novo/.test(request.url())) envios.push(request);
+  });
   await publicar2.click();
 
   await page.waitForURL(/\/feed$/);
+  // O que subiu foi a foto encolhida, não os 3 MB do arquivo.
+  expect(envios.length).toBeGreaterThan(0);
+  const tamanhoEnvio = (await envios[0].sizes()).requestBodySize;
+  expect(tamanhoEnvio).toBeGreaterThan(10_000);
+  expect(tamanhoEnvio).toBeLessThan(fotoPost.byteLength * 0.7);
   // Dois cards têm "Foto de Admin" agora (este post e o comentário com foto no post de
   // texto): o da foto é o que não carrega o texto do primeiro post.
   const cardFoto = page

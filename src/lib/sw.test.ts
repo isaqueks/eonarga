@@ -23,6 +23,8 @@ type FetchImpl = (request: Request) => Promise<Response>;
 
 interface Worker {
   notificationIcon: (iconPath?: unknown) => Promise<string>;
+  /** A estratégia de navegação: rede com 12 s de paciência, senão cache, senão offline. */
+  navigateFirst: (request: Request) => Promise<Response>;
   listeners: Map<string, Listener>;
   fetch: Mock<FetchImpl>;
   showNotification: Mock<(title: string, options: Record<string, unknown>) => Promise<void>>;
@@ -84,6 +86,7 @@ function boot(fetchImpl: FetchImpl = unauthorized): Worker {
   vm.runInContext(source, sandbox, { filename: "sw.js" });
   return {
     notificationIcon: sandbox.notificationIcon as Worker["notificationIcon"],
+    navigateFirst: sandbox.navigateFirst as Worker["navigateFirst"],
     listeners,
     fetch,
     showNotification,
@@ -179,6 +182,50 @@ describe("notificationIcon", () => {
     const pending = sw.notificationIcon(AVATAR);
     await vi.advanceTimersByTimeAsync(3_001);
     expect(await pending).toBe(APP_ICON);
+  });
+});
+
+describe("navigateFirst", () => {
+  const feed = () => new Request(`${ORIGIN}/feed`);
+
+  it("servidor lento (8 s) ainda é servido da rede: antes, 3 s viravam 'Sem internet'", async () => {
+    vi.useFakeTimers();
+    const sw = boot(
+      () =>
+        new Promise<Response>((resolve) => {
+          setTimeout(() => resolve(new Response("feed novo", { status: 200 })), 8_000);
+        }),
+    );
+    const pending = sw.navigateFirst(feed());
+    await vi.advanceTimersByTimeAsync(8_001);
+    expect(await (await pending).text()).toBe("feed novo");
+  });
+
+  it("passou de 12 s: a última cópia da URL; sem cópia, a página offline", async () => {
+    vi.useFakeTimers();
+    const sw = boot(() => new Promise<Response>(() => {}));
+    sw.store.set(`${ORIGIN}/feed`, new Response("feed de ontem", { status: 200 }));
+
+    const comCache = sw.navigateFirst(feed());
+    await vi.advanceTimersByTimeAsync(12_001);
+    expect(await (await comCache).text()).toBe("feed de ontem");
+
+    const semCache = sw.navigateFirst(new Request(`${ORIGIN}/galera`));
+    await vi.advanceTimersByTimeAsync(12_001);
+    const response = await semCache;
+    expect(response.status).toBe(503);
+    expect(await response.text()).toContain("Sem internet");
+  });
+
+  it("sem rede o fetch falha na hora e a cópia sai sem esperar", async () => {
+    vi.useFakeTimers();
+    const sw = boot(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    sw.store.set(`${ORIGIN}/feed`, new Response("feed de ontem", { status: 200 }));
+    const pending = sw.navigateFirst(feed());
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await (await pending).text()).toBe("feed de ontem");
   });
 });
 

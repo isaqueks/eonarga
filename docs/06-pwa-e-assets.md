@@ -87,15 +87,15 @@ Consequências de não ter bundler:
 
 ### Estratégias por request
 
-| Request                                   | Estratégia                                             | Cache               |
-| ----------------------------------------- | ------------------------------------------------------ | ------------------- |
-| Navegação (`request.mode === "navigate"`) | NetworkFirst, timeout 3 s → cache da URL → `/~offline` | `eonarga-<v>-pages` |
-| `/_next/static/*`, `/_next/image`         | CacheFirst (é hasheado)                                | `eonarga-<v>-shell` |
-| `/icons/*`, `/captcha/*`, `/logo.jpg`     | CacheFirst                                             | `eonarga-<v>-shell` |
-| Tiles do `tile.openstreetmap.org`         | CacheFirst, **300 entradas, 14 dias**                  | `eonarga-tiles`     |
-| `/api/uploads/*` (fotos)                  | CacheFirst, 200 entradas                               | `eonarga-uploads`   |
-| Resto de `/api/*`, payloads RSC, `/sw.js` | NetworkOnly (nem intercepta)                           | —                   |
-| Qualquer método diferente de GET          | NetworkOnly                                            | —                   |
+| Request                                   | Estratégia                                              | Cache               |
+| ----------------------------------------- | ------------------------------------------------------- | ------------------- |
+| Navegação (`request.mode === "navigate"`) | NetworkFirst, timeout 12 s → cache da URL → `/~offline` | `eonarga-<v>-pages` |
+| `/_next/static/*`, `/_next/image`         | CacheFirst (é hasheado)                                 | `eonarga-<v>-shell` |
+| `/icons/*`, `/captcha/*`, `/logo.jpg`     | CacheFirst                                              | `eonarga-<v>-shell` |
+| Tiles do `tile.openstreetmap.org`         | CacheFirst, **300 entradas, 14 dias**                   | `eonarga-tiles`     |
+| `/api/uploads/*` (fotos)                  | CacheFirst, 200 entradas                                | `eonarga-uploads`   |
+| Resto de `/api/*`, payloads RSC, `/sw.js` | NetworkOnly (nem intercepta)                            | —                   |
+| Qualquer método diferente de GET          | NetworkOnly                                             | —                   |
 
 - Pré-cache no `install`: `/~offline`, `/icons/icon-192.png`, `/icons/logo-face.png`,
   `/icons/badge-96.png`, `/logo.jpg`, `/manifest.webmanifest`.
@@ -143,7 +143,15 @@ também regrava.
 `controller`, o cliente (`src/components/pwa/service-worker.tsx`) mostra um toast fixo acima da
 bottom nav: "Tem versão nova. Atualizar?". O botão manda `postMessage({ type: "SKIP_WAITING" })`,
 o SW chama `skipWaiting()` e só então, no `controllerchange`, o cliente dá `location.reload()`.
-Nunca recarrega sozinho: ninguém perde uma avaliação pela metade.
+Não recarrega no meio de nada: ninguém perde uma avaliação pela metade.
+
+Duas exceções, as duas por causa de deploy com o app aberto (docs/08 #54): o `VersionWatch`
+(`src/components/pwa/version-watch.tsx`, no layout do app) pergunta a versão ao `/api/health`
+toda vez que a pessoa volta pro app e recarrega se mudou **e** não há texto digitado nem arquivo
+escolhido em formulário; e a tela de erro recarrega uma vez por versão quando a mensagem é de
+server action que não existe mais. O timeout da navegação subiu de 3 s pra 12 s no mesmo
+pacote: com 3 s, o servidor dividido passava do limite com frequência e o cache entregava uma
+página de antes do deploy, com ids de action velhos, ou a página offline.
 
 ### Registro
 

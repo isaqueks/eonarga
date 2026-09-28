@@ -92,6 +92,11 @@ Checagem sempre no servidor, dentro da server action, via `requireUser()` / `req
 - A chave com que o navegador assinou (`applicationServerKey`) é conferida com a `VAPID_PUBLIC_KEY` atual: assinatura de outra chave é recusada (`reason: "key-changed"`, com a chave atual na resposta) e o cliente assina de novo na hora. Trocar a chave VAPID no `.env`, portanto, não deixa ninguém pra trás: a próxima abertura resolve.
 - Push que falha vai pro log do container (`docker logs eonarga`): status HTTP, id da pessoa e o host do serviço de push — nunca o endpoint inteiro, que é o token do aparelho. Assinatura morta (404/410) também é logada quando sai.
 
+## Erros que a galera vê (docs/08 #54)
+
+- A tela de erro (`src/app/error.tsx`) manda mensagem, digest, tela e versão pra `POST /api/client-error`, que só escreve no log do container (`[eonarga] erro no cliente …`): sessão e mesma origem obrigatórias, 10 por minuto por pessoa, nada vai pro banco nem volta na resposta. `onRequestError` no `instrumentation.ts` faz o mesmo do lado do servidor pra qualquer erro em server action, página ou rota (`[eonarga] erro no servidor …`).
+- Foto encolhida no aparelho (`src/lib/image-client.ts`) não muda nada aqui: o servidor continua sniffando e reprocessando o que chega, com o mesmo teto de 10 MB.
+
 ## Flop de post (docs/08 #50)
 
 - A varredura roda dentro do processo do servidor, a cada 5 min (`src/lib/flop.ts`, ligada no `instrumentation.ts`; `EONARGA_SKIP_FLOP_SWEEP=1` desliga). Não existe endpoint público pra ela.

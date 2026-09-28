@@ -34,7 +34,10 @@ const PRECACHE = [
   "/manifest.webmanifest",
 ];
 
-const NAV_TIMEOUT_MS = 3000;
+// 12 s (eram 3): o servidor dividido com outros projetos passa de 3 s com frequência, e
+// aí a pessoa via "Sem internet" ou uma página velha do cache, com ids de server action
+// de antes do deploy (docs/08 #54). Sem rede de verdade o fetch falha na hora, não espera.
+const NAV_TIMEOUT_MS = 12000;
 /** Quanto a notificação espera pela foto de perfil antes de sair com o ícone do app. */
 const ICON_TIMEOUT_MS = 3000;
 /** Foto maior que isso não vira data URL (as thumbs têm 400 px e ficam bem abaixo). */

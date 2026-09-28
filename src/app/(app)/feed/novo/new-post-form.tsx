@@ -20,6 +20,7 @@ import { AudioPlayer } from "@/components/posts/audio-player";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MentionTextarea } from "@/components/mentions/mention-textarea";
+import { shrinkImage } from "@/lib/image-client";
 import { detectImportLink, type ImportProvider } from "@/lib/import-links";
 import { formatLatLng, haversineMeters, nearestPlace, POST_BODY_MAX } from "@/lib/posts";
 import { AUDIO_MAX_BYTES, PHOTO_MAX_BYTES, VIDEO_MAX_BYTES } from "@/lib/constants";
@@ -117,6 +118,12 @@ export function NewPostForm({
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  // Foto encolhida no aparelho (docs/08 #54): substitui a do input na hora de publicar.
+  // O `field` é o input de onde ela veio (`photo` ou `media`); `shrinking` segura o
+  // "Publicar" enquanto o canvas trabalha (menos de um segundo).
+  const [shrunk, setShrunk] = useState<{ field: string; file: File } | null>(null);
+  const [shrinking, setShrinking] = useState(false);
+  const shrinkRunRef = useRef(0);
   // Áudio gravado no app: não passa por input, vai direto no FormData ao publicar.
   const [recording, setRecording] = useState(false);
   const [recorded, setRecorded] = useState<Recording | null>(null);
@@ -217,6 +224,25 @@ export function NewPostForm({
     }
   }
 
+  /** Esquece a foto encolhida (e qualquer encolhimento em andamento). */
+  function dropShrunk() {
+    shrinkRunRef.current += 1;
+    setShrunk(null);
+    setShrinking(false);
+  }
+
+  /** Encolhe a foto em segundo plano; só a última escolha conta. */
+  function startShrink(field: string, file: File) {
+    const run = ++shrinkRunRef.current;
+    setShrunk(null);
+    setShrinking(true);
+    void shrinkImage(file).then((result) => {
+      if (shrinkRunRef.current !== run) return;
+      setShrunk(result === file ? null : { field, file: result });
+      setShrinking(false);
+    });
+  }
+
   /** Joga fora a gravação (a URL da prévia é devolvida pelo efeito lá em cima). */
   function dropRecording() {
     setRecorded(null);
@@ -253,6 +279,7 @@ export function NewPostForm({
     if (!file) return;
     dropImported();
     dropRecording();
+    dropShrunk();
     clearInputs(input);
     setMediaError(null);
     setVideoDims(null);
@@ -289,12 +316,14 @@ export function NewPostForm({
     }
     setPreview(isVideo ? { kind: "video", url, poster: null } : { kind: "image", url });
     setHasMedia(true);
+    if (!isVideo) startShrink(input.name, file);
   }
 
   function clearMedia() {
     clearInputs();
     dropImported();
     dropRecording();
+    dropShrunk();
     setHasMedia(false);
     setPreview(null);
     setVideoDims(null);
@@ -352,11 +381,15 @@ export function NewPostForm({
     importFromLink(sharedLink.url);
   }, [sharedLink, importFromLink]);
 
-  const canPublish = chosen !== null && (hasMedia || body.trim().length > 0);
+  const canPublish = chosen !== null && (hasMedia || body.trim().length > 0) && !shrinking;
 
-  /** A gravação vai no FormData na hora de publicar, como se fosse um input `audio`. */
+  /**
+   * A gravação vai no FormData na hora de publicar, como se fosse um input `audio`; a
+   * foto encolhida entra no lugar da original do input.
+   */
   function submit(formData: FormData) {
     if (recorded) formData.set("audio", recorded.blob, `gravacao.${recorded.ext}`);
+    if (shrunk) formData.set(shrunk.field, shrunk.file, shrunk.file.name);
     formAction(formData);
   }
 
@@ -515,6 +548,11 @@ export function NewPostForm({
         {mediaError ? (
           <p role="alert" className="text-destructive text-xs">
             {mediaError}
+          </p>
+        ) : null}
+        {shrinking ? (
+          <p role="status" className="text-muted-foreground text-xs">
+            Preparando a foto…
           </p>
         ) : null}
         {!preview && !recording ? (

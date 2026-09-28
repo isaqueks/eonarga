@@ -29,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import { AUDIO_MAX_BYTES, COMMENT_MAX, PHOTO_MAX_BYTES } from "@/lib/constants";
+import { shrinkImage } from "@/lib/image-client";
 import { mentionToken } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 
@@ -113,7 +114,14 @@ const ATTACH_CLASS =
  * hora de enviar; o áudio da galeria fica no input dele.
  */
 type Attachment =
-  | { kind: "photo"; url: string }
+  | {
+      kind: "photo";
+      url: string;
+      /** O arquivo que sobe: o original até o encolhimento terminar, depois o JPEG menor. */
+      file: File;
+      /** Falso enquanto o aparelho encolhe a foto (docs/08 #54); segura o "Enviar". */
+      ready: boolean;
+    }
   | {
       kind: "audio";
       url: string;
@@ -249,7 +257,16 @@ export function CommentThread({
       return;
     }
     setMediaError(null);
-    setAttachment({ kind: "photo", url: keepUrl(URL.createObjectURL(file)) });
+    setAttachment({ kind: "photo", url: keepUrl(URL.createObjectURL(file)), file, ready: false });
+    // Foto grande é encolhida aqui no aparelho antes de subir; se a pessoa trocou de foto
+    // no meio, o resultado velho é ignorado.
+    void shrinkImage(file).then((result) => {
+      setAttachment((current) =>
+        current?.kind === "photo" && current.file === file
+          ? { ...current, file: result, ready: true }
+          : current,
+      );
+    });
   }
 
   /** Áudio da galeria: só quando o navegador não grava. Duração e desenho vêm depois. */
@@ -301,7 +318,11 @@ export function CommentThread({
     clearAttachment();
   }
 
-  const canSend = !sending && !recording && (draft.trim() !== "" || attachment !== null);
+  const canSend =
+    !sending &&
+    !recording &&
+    (draft.trim() !== "" || attachment !== null) &&
+    !(attachment?.kind === "photo" && !attachment.ready);
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
@@ -407,6 +428,10 @@ export function CommentThread({
               const { blob, ext } = attachment.recording;
               formData.set("audio", blob, `gravacao.${ext}`);
             }
+            // A foto encolhida entra no lugar da original do input.
+            if (attachment?.kind === "photo") {
+              formData.set("photo", attachment.file, attachment.file.name);
+            }
             addOptimistic({
               body,
               photo:
@@ -479,12 +504,19 @@ export function CommentThread({
             <AudioRecorder onDone={finishRecording} onCancel={() => setRecording(false)} />
           ) : attachment?.kind === "photo" ? (
             <AttachmentPreview onRemove={clearAttachment} removeLabel="Tirar foto">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={attachment.url}
-                alt="Prévia da foto"
-                className="bg-muted max-h-40 max-w-full rounded-lg object-contain"
-              />
+              <div className="flex min-w-0 flex-col gap-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={attachment.url}
+                  alt="Prévia da foto"
+                  className="bg-muted max-h-40 max-w-full rounded-lg object-contain"
+                />
+                {!attachment.ready ? (
+                  <p role="status" className="text-muted-foreground text-xs">
+                    Preparando a foto…
+                  </p>
+                ) : null}
+              </div>
             </AttachmentPreview>
           ) : attachment?.kind === "audio" ? (
             <AttachmentPreview onRemove={clearAttachment} removeLabel="Tirar áudio">

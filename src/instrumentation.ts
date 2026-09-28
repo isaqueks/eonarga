@@ -1,3 +1,5 @@
+import type { Instrumentation } from "next";
+
 /**
  * Roda uma vez quando o servidor Next sobe (dev, start e no container):
  * aplica migrations, faz o seed idempotente (categorias + primeiro admin) e liga a
@@ -26,3 +28,19 @@ export async function register() {
     startFlopSweeper();
   }
 }
+
+/**
+ * Todo erro que o Next captura numa server action, página ou rota vai pro log do
+ * container com método, caminho e digest (docs/08 #54). Antes, um post que quebrava
+ * no servidor não deixava linha nenhuma no `docker logs`.
+ */
+export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
+  const message = error instanceof Error ? error.message : String(error);
+  const digest =
+    typeof error === "object" && error !== null && "digest" in error
+      ? String((error as { digest: unknown }).digest)
+      : "-";
+  console.error(
+    `[eonarga] erro no servidor: ${request.method} ${request.path} (${context.routeType} ${context.routePath}) digest=${digest}: ${message}`,
+  );
+};

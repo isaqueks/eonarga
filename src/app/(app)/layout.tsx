@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { PushSync } from "@/components/pwa/push-sync";
+import { VersionWatch } from "@/components/pwa/version-watch";
 import { requireUser } from "@/lib/auth/guards";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
       <BottomNav />
       <PushSync />
+      <VersionWatch />
     </div>
   );
 }
