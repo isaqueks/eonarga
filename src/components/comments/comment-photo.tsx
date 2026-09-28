@@ -7,7 +7,10 @@ import { cn } from "@/lib/utils";
 
 /** O que a foto de um comentário precisa pra aparecer: a URL e, quando tem, a proporção. */
 export interface CommentPhotoView {
+  /** Variante grande, pra tela cheia. */
   url: string;
+  /** Variante de 800 px pro balão (docs/08 #56); a prévia otimista não tem e usa a `url`. */
+  mediumUrl?: string;
   /** Dimensões da variante grande; 0 quando não se sabe (prévia otimista). */
   width: number;
   height: number;
@@ -45,7 +48,7 @@ export function CommentPhoto({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={photo.url}
+          src={photo.mediumUrl ?? photo.url}
           alt={alt}
           width={photo.width || undefined}
           height={photo.height || undefined}

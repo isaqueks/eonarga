@@ -9,7 +9,9 @@ import type { PostPhoto as PostPhotoData } from "@/lib/queries/posts";
  * A foto do post: largura total do card, com a proporção da imagem reservada antes
  * de ela carregar (nada de layout pulando). Tocar abre em tela cheia.
  *
- * Sem `next/image`: a rota é autenticada e o id já é imutável (mesmo motivo da galeria).
+ * O card mostra a variante `medium` (800 px, metade dos bytes) e a tela cheia a `full`
+ * (docs/08 #56). Sem `next/image`: a rota é autenticada e o id já é imutável (mesmo
+ * motivo da galeria).
  */
 export function PostPhoto({ photo, authorName }: { photo: PostPhotoData; authorName: string }) {
   const [open, setOpen] = useState(false);
@@ -26,7 +28,7 @@ export function PostPhoto({ photo, authorName }: { photo: PostPhotoData; authorN
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={photo.url}
+          src={photo.mediumUrl}
           alt={alt}
           width={photo.width || undefined}
           height={photo.height || undefined}

@@ -27,20 +27,20 @@ Este diretório é o plano do projeto: o que vamos construir, como, e em que ord
 
 ## Decisões-chave (aprovadas em 02/09/2026; detalhes no [08](./08-decisoes-em-aberto.md))
 
-| Tema              | Decisão                                                                                                                               | Por quê                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Framework         | Next.js (App Router) + TypeScript                                                                                                     | Um repo só, SSR + server actions, ecossistema grande pra editor, mapa e PWA    |
-| Banco             | SQLite via Drizzle ORM (libsql)                                                                                                       | Zero infra, backup = copiar um arquivo, compatível com Turso se for pra Vercel |
-| Mapa              | Leaflet + tiles OpenStreetMap com filtro escuro em CSS                                                                                | Grátis, sem chave; a CARTO passou a exigir API key                             |
-| Google Maps       | Deep links + colar link compartilhado do Maps                                                                                         | Resolve quase todo o uso sem API key; Places API fica opcional                 |
-| Busca de endereço | Photon (OSM) pra autocomplete, Nominatim pra reverse                                                                                  | Grátis; Nominatim proíbe autocomplete, Photon foi feito pra isso               |
-| Editor            | Tiptap (WYSIWYG com atalhos markdown)                                                                                                 | Visual, funciona bem no celular, salva HTML sanitizado                         |
-| Auth              | Sessão em cookie + argon2, sem cadastro aberto                                                                                        | Simples, sem email transacional                                                |
-| PWA               | Service worker escrito à mão (`public/sw.js`) + manifest + ícones gerados do jpg                                                      | Instalável no celular, offline básico; Serwist é webpack e o build é Turbopack |
-| Hospedagem        | VPS próprio já compartilhado com outros projetos: app em Docker atrás do Caddy que existe lá, domínio `eonarga.com.br` via Cloudflare | Uploads em disco, sem mexer no que já roda                                     |
-| Nota              | 1 a 5 "nargas", com meio ponto                                                                                                        | Familiar; ranking usa média bayesiana pra não premiar lugar com uma nota só    |
-| Privacidade       | Nada é privado dentro do grupo: "quero ir", "já fui", avaliações, reações                                                             | É um caderninho compartilhado, não uma rede social                             |
-| Captcha           | reCAPTCHA falso temático no login ("selecione todas as imagens com narguilé")                                                         | Zoeira. Não valida nada; a proteção real é o rate limit                        |
+| Tema              | Decisão                                                                                                                              | Por quê                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Framework         | Next.js (App Router) + TypeScript                                                                                                    | Um repo só, SSR + server actions, ecossistema grande pra editor, mapa e PWA    |
+| Banco             | Postgres via Drizzle ORM (`pg`); PGlite (Postgres em wasm) em dev e teste — desde a 0.19.0, era SQLite                               | Banco de verdade na VPS própria; em dev não instala nada (08 #55)              |
+| Mapa              | Leaflet + tiles OpenStreetMap com filtro escuro em CSS                                                                               | Grátis, sem chave; a CARTO passou a exigir API key                             |
+| Google Maps       | Deep links + colar link compartilhado do Maps                                                                                        | Resolve quase todo o uso sem API key; Places API fica opcional                 |
+| Busca de endereço | Photon (OSM) pra autocomplete, Nominatim pra reverse                                                                                 | Grátis; Nominatim proíbe autocomplete, Photon foi feito pra isso               |
+| Editor            | Tiptap (WYSIWYG com atalhos markdown)                                                                                                | Visual, funciona bem no celular, salva HTML sanitizado                         |
+| Auth              | Sessão em cookie + argon2, sem cadastro aberto                                                                                       | Simples, sem email transacional                                                |
+| PWA               | Service worker escrito à mão (`public/sw.js`) + manifest + ícones gerados do jpg                                                     | Instalável no celular, offline básico; Serwist é webpack e o build é Turbopack |
+| Hospedagem        | VPS só do projeto (Ubuntu 24 + Docker): app + Postgres em compose atrás do Caddy da máquina, domínio `eonarga.com.br` via Cloudflare | Uploads em disco; imagem construída na própria VPS (08 #55)                    |
+| Nota              | 1 a 5 "nargas", com meio ponto                                                                                                       | Familiar; ranking usa média bayesiana pra não premiar lugar com uma nota só    |
+| Privacidade       | Nada é privado dentro do grupo: "quero ir", "já fui", avaliações, reações                                                            | É um caderninho compartilhado, não uma rede social                             |
+| Captcha           | reCAPTCHA falso temático no login ("selecione todas as imagens com narguilé")                                                        | Zoeira. Não valida nada; a proteção real é o rate limit                        |
 
 ## Status
 

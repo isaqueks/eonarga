@@ -8,7 +8,7 @@ Fases curtas, cada uma termina com algo usável. A ordem é a dependência real:
 
 - [x] `create-next-app@latest` (Next 16.3, TS, App Router, Tailwind v4, ESLint) + Prettier
 - [x] shadcn/ui init (preset `base-nova`), tema escuro padrão, paleta do [04](./04-ui-ux.md) em `globals.css`, fonte display
-- [x] Drizzle + libsql, `schema.ts` completo (inclusive o que é v2), migration `0000_init`, seed de categorias e do primeiro admin
+- [x] Drizzle + libsql, `schema.ts` completo (inclusive o que é v2), migration `0000_init`, seed de categorias e do primeiro admin (SQLite trocado por Postgres na 0.19.0, docs/08 #55)
 - [x] Migrations + seed rodam sozinhos no start do servidor (`src/instrumentation.ts`)
 - [x] `Dockerfile` (multi-stage, `output: standalone`), `compose.yml` com Caddy e volume `app_data`, `Caddyfile` com o domínio
 - [x] `.env.example`, `README.md` do repo com "como rodar"
@@ -157,6 +157,8 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Foto e áudio em comentário e em resposta de avaliação (migration 0013): `lib/comment-media.ts` (mesmas regras da mídia de post, um anexo por comentário, 30/h), botões 📷/🎤 na caixa da `CommentThread` com prévia e o gravador na própria thread, `CommentPhoto` (menor, abre em tela cheia), push "📷 Foto" / "🎤 Áudio" quando não tem texto, anexos apagados junto com o comentário, o post ou a avaliação; testes e e2e
 - [x] Flop passa de 6 h pra 4 h (0.18.1, docs/08 #53): só `FLOP_AFTER_MS`; a janela máxima de 12 h fica
 - [x] Correção: erros intermitentes ao postar e comentar (docs/08 #54): foto encolhida no aparelho antes de subir (`lib/image-client.ts`, no post e no comentário), `VersionWatch` recarrega ao voltar pro app depois de deploy, tela de erro recarrega em "Server action not found", timeout de navegação do SW 3 s → 12 s, `POST /api/client-error` e `onRequestError` levam os erros pro log; testes e e2e
+- [x] Postgres no lugar do SQLite (0.19.0, docs/08 #55): schema em `pg-core`, migration regerada, driver `pg` em produção e PGlite em dev/teste/e2e (`client.ts` escolhe pela URL), `compose.prod.yml` com `eonarga-db`, migração dos dados via `sqlite3 -json` → `scripts/sqlite-dump-to-sql.ts` → `psql` (ensaiada por `scripts/sqlite-dump-check.ts`), backup diário (`deploy/backup.sh`), deploy construindo a imagem na VPS (`deploy/build-and-up.sh`); testes
+- [x] Lentidão: variante `medium` (800 px) das fotos gerada sob demanda pro card e pro balão de comentário, vídeo só carrega perto da tela, `Cache-Control` de uma semana nos estáticos públicos, `feed/loading.tsx` (0.19.0, docs/08 #56); testes
 - [ ] Testar gravação de áudio num iPhone de verdade (Safari grava AAC em MP4) e conferir se o WebM/Opus gravado no Android toca lá
 
 ## Definição de pronto (qualquer tarefa)

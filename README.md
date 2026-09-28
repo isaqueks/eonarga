@@ -32,37 +32,35 @@ npm run db:seed
 | `npm run format`                         | Prettier                                                   |
 | `npm run db:generate`                    | Gera migration a partir de `src/lib/db/schema.ts`          |
 | `npm run db:migrate` / `npm run db:seed` | Aplica migrations / cria categorias e admin                |
-| `npm run db:studio`                      | Drizzle Studio pra olhar o banco                           |
+| `npm run db:studio`                      | Drizzle Studio (precisa de um Postgres de verdade na URL)  |
+| `npm run db:import-sqlite`               | Converte o dump JSON do SQLite antigo em SQL pro `psql`    |
+| `npm run test:e2e`                       | Playwright: um fluxo inteiro num Chrome de celular         |
 | `npm run icons`                          | Regenera favicon e ícones do PWA a partir do `eonarga.jpg` |
+
+## Banco
+
+Postgres via Drizzle. Em dev, teste e e2e não precisa instalar nada: sem `DATABASE_URL` o app usa o **PGlite** (Postgres em wasm) na pasta `./data/pglite`, com as mesmas migrations de produção. Pra usar um Postgres de verdade, `DATABASE_URL=postgres://usuario:senha@host:5432/banco`.
 
 ## Produção
 
-Dois jeitos, conforme o servidor:
+Como está no ar em `eonarga.com.br` (detalhes em `docs/02`): VPS própria com Docker, Caddy do sistema nas portas 80/443 atrás da Cloudflare, e o `compose.prod.yml` subindo o app em `127.0.0.1:3010` mais um Postgres 18 que só o app enxerga. O `.env` da VPS precisa de `POSTGRES_PASSWORD` (`openssl rand -hex 24`) além das variáveis do `.env.example`.
 
-**VPS só nosso** (`compose.yml`): sobe o app e um Caddy que emite o certificado sozinho.
-
-```bash
-cp .env.example .env      # valores de produção; SITE_ADDRESS é o domínio
-docker compose up -d --build
-```
-
-**VPS que já tem um reverse proxy** (`compose.prod.yml`, é como está no ar em `eonarga.com.br`): sobe só o app em `127.0.0.1:3010`, e o proxy existente encaminha pra lá. A imagem é construída na máquina de dev, porque o VPS é pequeno:
+Deploy — a imagem é construída na própria VPS:
 
 ```bash
-docker build -t eonarga:0.1.0 .
-docker save eonarga:0.1.0 | gzip > eonarga-0.1.0.tar.gz   # envie pro VPS
-# no VPS:
-docker load < eonarga-0.1.0.tar.gz
-EONARGA_TAG=0.1.0 docker compose -f compose.prod.yml up -d
+# na máquina de dev
+git archive --format=tar.gz -o eonarga-0.19.0.tar.gz HEAD        # envie pra /opt/eonarga/src/
+# na VPS
+mkdir -p /opt/eonarga/src/0.19.0 && tar xzf /opt/eonarga/src/eonarga-0.19.0.tar.gz -C /opt/eonarga/src/0.19.0
+cp /opt/eonarga/src/0.19.0/compose.prod.yml /opt/eonarga/ && cp -r /opt/eonarga/src/0.19.0/deploy /opt/eonarga/
+/opt/eonarga/deploy/build-and-up.sh 0.19.0
 ```
 
-Migrations e seed rodam no start. Banco e uploads ficam no volume `app_data`. Backup:
+Migrations e seed rodam no start. Uploads ficam no volume `app_data`, o banco no `pg_data`. Backup diário: `deploy/backup.sh` (`pg_dump` + espelho dos uploads em `/opt/eonarga/backups`), instalado copiando `deploy/eonarga-backup.cron` pra `/etc/cron.d/eonarga-backup`. Restaurar o banco: `docker exec -i eonarga-db pg_restore -U eonarga -d eonarga --clean --if-exists < eonarga-<data>.dump`.
 
-```bash
-docker compose -f compose.prod.yml exec app sh -c "cd /app/data && tar cz ." > backup-$(date +%F).tgz
-```
+**VPS só nosso com Caddy próprio** (`compose.yml`): `cp .env.example .env` (com `SITE_ADDRESS` e `POSTGRES_PASSWORD`) e `docker compose up -d --build`. Pra testar local sem domínio: `SITE_ADDRESS=localhost docker compose up --build` e abra `https://localhost` (aceite o certificado local do Caddy).
 
-Pra testar o `compose.yml` local sem domínio: `SITE_ADDRESS=localhost docker compose up --build` e abra `https://localhost` (aceite o certificado local do Caddy).
+Vindo de uma instalação com SQLite (até a 0.18.x)? O caminho está em `docs/08` #55: `sqlite3 -json` de cada tabela → `npm run db:import-sqlite <pasta> saida.sql` → `psql`; `npx tsx scripts/sqlite-dump-check.ts <pasta>` ensaia antes.
 
 ## Estrutura
 

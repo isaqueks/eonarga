@@ -97,7 +97,43 @@ describe("isValidImageId", () => {
   });
 });
 
+describe("variante medium (docs/08 #56)", () => {
+  it("nasce da full na primeira leitura, cabe em 800 px e fica guardada", async () => {
+    const saved = await saveImage(await png(2400, 1200));
+    expect(await exists(imagePath(saved.id, "medium"))).toBe(false);
+
+    const medium = await readImage(saved.id, "medium");
+    expect(medium).not.toBeNull();
+    const info = await sharp(medium!).metadata();
+    expect(info.format).toBe("webp");
+    expect(info.width).toBe(800);
+    expect(info.height).toBe(400);
+    expect(await exists(imagePath(saved.id, "medium"))).toBe(true);
+
+    // Segunda leitura vem do arquivo guardado, igualzinha.
+    expect(Buffer.compare((await readImage(saved.id, "medium"))!, medium!)).toBe(0);
+  });
+
+  it("não aumenta foto menor que 800 px e some junto com as outras variantes", async () => {
+    const saved = await saveImage(await png(300, 200));
+    const info = await sharp((await readImage(saved.id, "medium"))!).metadata();
+    expect(info.width).toBe(300);
+
+    await deleteImage(saved.id);
+    expect(await exists(imagePath(saved.id, "full"))).toBe(false);
+    expect(await exists(imagePath(saved.id, "medium"))).toBe(false);
+    expect(await exists(imagePath(saved.id, "thumb"))).toBe(false);
+    expect(await readImage(saved.id, "medium")).toBeNull();
+  });
+});
+
 describe("imagePath", () => {
+  it("medium tem o próprio sufixo", () => {
+    expect(path.basename(imagePath("abcdefghijklmnop", "medium"))).toBe(
+      "abcdefghijklmnop.medium.webp",
+    );
+  });
+
   it("full e thumb têm nomes diferentes, os dois em webp", () => {
     const id = "aB3_-xYz01234567";
     expect(imagePath(id, "full")).toBe(path.join(UPLOAD_DIR, `${id}.webp`));

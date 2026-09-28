@@ -58,6 +58,7 @@ let actions: CommentsModule;
 let comments: typeof import("@/lib/queries/comments");
 let reviewQueries: typeof import("@/lib/queries/reviews");
 let db: ClientModule["db"];
+let closeDb: ClientModule["closeDb"];
 let schema: SchemaModule;
 let tmpDir: string;
 let uploadDir: string;
@@ -94,15 +95,14 @@ async function seed(who: typeof ANA, body: string, reviewId = REVIEW_ID): Promis
 beforeAll(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "eonarga-comments-"));
   uploadDir = path.join(tmpDir, "uploads");
-  const file = path.join(tmpDir, "test.db").split(path.sep).join("/");
-  process.env.DATABASE_URL = `file:${file}`;
+  process.env.DATABASE_URL = "pglite://memory";
   // storage.ts lê UPLOAD_DIR no import: tem que estar de pé antes do primeiro import.
   process.env.UPLOAD_DIR = uploadDir;
 
   const { runMigrations } = await import("@/lib/db/migrate");
   await runMigrations();
 
-  ({ db } = await import("@/lib/db/client"));
+  ({ db, closeDb } = await import("@/lib/db/client"));
   schema = await import("@/lib/db/schema");
   actions = await import("./comments");
   comments = await import("@/lib/queries/comments");
@@ -162,8 +162,8 @@ beforeAll(async () => {
   ]);
 });
 
-afterAll(() => {
-  db.$client.close();
+afterAll(async () => {
+  await closeDb();
   try {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   } catch {
@@ -330,6 +330,7 @@ describe("resposta com foto ou áudio (docs/08 #52)", () => {
     expect(list[0].photo).toEqual({
       id: row.photoId,
       url: `/api/uploads/${row.photoId}`,
+      mediumUrl: `/api/uploads/${row.photoId}?v=medium`,
       thumbUrl: `/api/uploads/${row.photoId}?v=thumb`,
       width: 120,
       height: 80,

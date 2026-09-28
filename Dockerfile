@@ -18,7 +18,6 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
-    DATABASE_URL=file:/app/data/eonarga.db \
     UPLOAD_DIR=/app/data/uploads
 
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs \

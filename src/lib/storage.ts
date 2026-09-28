@@ -16,7 +16,13 @@ import sharp, { type OutputInfo } from "sharp";
 
 import { PHOTO_MAX_BYTES } from "@/lib/constants";
 
-export type ImageVariant = "full" | "thumb";
+/**
+ * `full` é a original reprocessada (até 1600 px); `thumb` a quadrada de 400 px; `medium`
+ * (até 800 px) é a que o card do feed mostra (docs/08 #56): metade dos bytes da full
+ * numa tela de celular, e gerada sob demanda a partir da full na primeira vez que alguém
+ * pede — as fotos de antes ganham a variante sem reprocessar nada em massa.
+ */
+export type ImageVariant = "full" | "medium" | "thumb";
 
 export interface StoredImage {
   id: string;
@@ -49,6 +55,8 @@ const ID_RE = /^[A-Za-z0-9_-]{16}$/;
 const DEFAULT_MAX_SIZE = 1600;
 /** Lado da thumb quadrada. */
 const DEFAULT_THUMB_SIZE = 400;
+/** Lado maior da variante `medium`. */
+export const MEDIUM_MAX_SIZE = 800;
 
 /** ~100 megapixels: trava simples contra "zip bomb" de imagem. */
 const MAX_INPUT_PIXELS = 100_000_000;
@@ -71,7 +79,7 @@ export function isValidImageId(id: string): boolean {
 
 /** Caminho no disco de uma variante. Nunca chame sem validar o id antes. */
 export function imagePath(id: string, variant: ImageVariant): string {
-  const suffix = variant === "thumb" ? ".thumb.webp" : ".webp";
+  const suffix = variant === "full" ? ".webp" : `.${variant}.webp`;
   return path.join(UPLOAD_DIR, `${id}${suffix}`);
 }
 
@@ -164,21 +172,55 @@ export async function saveImage(
   return { id, width: full.info.width, height: full.info.height, bytes: full.data.length };
 }
 
-/** Conteúdo da variante, ou `null` se o id for inválido / o arquivo não existir. */
+/**
+ * Conteúdo da variante, ou `null` se o id for inválido / o arquivo não existir.
+ * A `medium` que ainda não existe é gerada da `full` e guardada pra próxima vez.
+ */
 export async function readImage(id: string, variant: ImageVariant): Promise<Buffer | null> {
   if (!isValidImageId(id)) return null;
   try {
     return await fs.readFile(imagePath(id, variant));
   } catch {
-    return null;
+    if (variant !== "medium") return null;
+    return buildMedium(id);
   }
 }
 
-/** Apaga as duas variantes. Idempotente: arquivo que não existe não é erro. */
+/** Gera a `medium` a partir da `full`; grava num temporário e renomeia, pra duas
+ * requisições ao mesmo tempo não deixarem um arquivo pela metade. */
+async function buildMedium(id: string): Promise<Buffer | null> {
+  let full: Buffer;
+  try {
+    full = await fs.readFile(imagePath(id, "full"));
+  } catch {
+    return null;
+  }
+  const medium = await sharp(full, { limitInputPixels: MAX_INPUT_PIXELS })
+    .resize({
+      width: MEDIUM_MAX_SIZE,
+      height: MEDIUM_MAX_SIZE,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 80 })
+    .toBuffer();
+  const target = imagePath(id, "medium");
+  const temp = `${target}.${nanoid(6)}.tmp`;
+  try {
+    await fs.writeFile(temp, medium);
+    await fs.rename(temp, target);
+  } catch {
+    // Disco cheio ou corrida perdida: a foto sai do mesmo jeito, só não fica guardada.
+    await fs.rm(temp, { force: true }).catch(() => {});
+  }
+  return medium;
+}
+
+/** Apaga todas as variantes. Idempotente: arquivo que não existe não é erro. */
 export async function deleteImage(id: string): Promise<void> {
   if (!isValidImageId(id)) return;
   await Promise.all(
-    (["full", "thumb"] as const).map((variant) =>
+    (["full", "medium", "thumb"] as const).map((variant) =>
       fs.rm(imagePath(id, variant), { force: true }).catch(() => {}),
     ),
   );

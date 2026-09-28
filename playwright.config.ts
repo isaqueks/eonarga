@@ -8,21 +8,17 @@ const BASE_URL = `http://localhost:${PORT}`;
 
 import { E2E_ADMIN } from "./e2e/fixtures";
 
-// Banco só do e2e, zerado a cada rodada (o servidor cria e semeia no start).
-// A config também é carregada nos workers, com o servidor já de pé: aí o arquivo
-// está ocupado (EBUSY) e a limpeza é simplesmente ignorada.
-const E2E_DB = path.resolve("data/e2e.db");
+// Banco só do e2e (PGlite numa pasta, docs/08 #55), zerado a cada rodada: o servidor
+// cria as tabelas e semeia no start. A config também é carregada nos workers, com o
+// servidor já de pé; aí não pode apagar nada (TEST_WORKER_INDEX só existe no worker).
+const E2E_DB_DIR = path.resolve("data/e2e-pglite");
+if (!process.env.TEST_WORKER_INDEX) {
+  fs.rmSync(E2E_DB_DIR, { recursive: true, force: true });
+}
 
 // Chaves VAPID só do e2e: ligam "Chamar galera" e "Dedar" sem depender do .env da
 // máquina. O banco do e2e não tem assinatura, então nenhum push sai de verdade.
 const vapid = webpush.generateVAPIDKeys();
-for (const suffix of ["", "-wal", "-shm"]) {
-  try {
-    fs.rmSync(E2E_DB + suffix, { force: true });
-  } catch {
-    // servidor já abriu o banco: nada a fazer
-  }
-}
 
 export default defineConfig({
   testDir: "./e2e",
@@ -65,7 +61,7 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       ...process.env,
-      DATABASE_URL: "file:./data/e2e.db",
+      DATABASE_URL: "pglite://./data/e2e-pglite",
       NEXT_PUBLIC_CAPTCHA_MODE: "always",
       APP_URL: BASE_URL,
       // Liga o link público (src/lib/share.ts) sem depender do .env da máquina.

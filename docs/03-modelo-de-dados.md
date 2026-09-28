@@ -1,6 +1,6 @@
 # 03 — Modelo de dados
 
-SQLite, migrations geradas pelo Drizzle. IDs são `text` (nanoid) pra não vazar contagem e facilitar merge de backups. Datas em ISO 8601 UTC (`text`). Booleans em `integer` 0/1.
+Postgres 18 (desde a 0.19.0; era SQLite, docs/08 #55), migrations geradas pelo Drizzle a partir de `src/lib/db/schema.ts` (`drizzle-orm/pg-core`). A migration foi regerada do zero na troca (`drizzle/0000_init.sql`); as 14 do SQLite ficam no histórico do git. IDs são `text` (nanoid) pra não vazar contagem e facilitar merge de backups. Datas em ISO 8601 UTC (`text`), no formato do `toISOString()` — o default do banco é `to_char(now() at time zone 'utc', …)` no mesmo formato, e comparar/ordenar por texto funciona porque a collation é `C.UTF-8` (byte a byte). Booleans são `boolean`; `lat`/`lng` são `double precision`.
 
 ## Diagrama
 
@@ -172,7 +172,7 @@ O mesmo desenho de `review_reactions` / `review_comments`, apontando pra `posts`
 
 Quem apaga um comentário: quem escreveu, quem postou ou admin (resolvido na query, com o `user_id` do post junto).
 
-Foto ou áudio no comentário (docs/08 #52, migration 0013), tanto em `post_comments` quanto em `review_comments`: `photo_id`, `photo_width`, `photo_height` (o mesmo storage de imagens, `{id}.webp` / `{id}.thumb.webp`, reprocessada em até 1200 px) e `audio_id`, `audio_ext`, `audio_duration_ms`, `audio_peaks` (o mesmo storage e as mesmas regras do áudio de post). Um anexo por comentário — foto e áudio juntos a action recusa. `body` continua `NOT NULL`: comentário só de anexo grava `""` (mudar a coluna pra nula exigiria recriar a tabela no SQLite, e o `DROP TABLE` com FK ligada dispararia o cascade nas curtidas). Os arquivos são apagados junto com o comentário, e também quando o post ou a avaliação some (o cascade do banco não sabe de disco: `deletePost`/`deleteReview` recolhem os ids antes).
+Foto ou áudio no comentário (docs/08 #52, migration 0013), tanto em `post_comments` quanto em `review_comments`: `photo_id`, `photo_width`, `photo_height` (o mesmo storage de imagens, `{id}.webp` / `{id}.thumb.webp`, reprocessada em até 1200 px) e `audio_id`, `audio_ext`, `audio_duration_ms`, `audio_peaks` (o mesmo storage e as mesmas regras do áudio de post). Um anexo por comentário — foto e áudio juntos a action recusa. `body` continua `NOT NULL`: comentário só de anexo grava `""` (na época do SQLite, mudar a coluna pra nula exigiria recriar a tabela; no Postgres seria um `ALTER`, mas o `""` já está em produção e o código trata igual). Os arquivos são apagados junto com o comentário, e também quando o post ou a avaliação some (o cascade do banco não sabe de disco: `deletePost`/`deleteReview` recolhem os ids antes).
 
 ### review_comment_likes e post_comment_likes
 

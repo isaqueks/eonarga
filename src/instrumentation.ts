@@ -10,9 +10,17 @@ export async function register() {
   if (process.env.NEXT_PHASE === "phase-production-build") return;
   if (process.env.EONARGA_SKIP_MIGRATE === "1") return;
 
+  if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+    throw new Error(
+      "[eonarga] DATABASE_URL não definido: produção precisa de um Postgres (postgres://usuario:senha@host:5432/banco).",
+    );
+  }
+
+  const { dbKind } = await import("./lib/db/client");
   const { runMigrations } = await import("./lib/db/migrate");
   const { seedAll } = await import("./lib/db/seed");
 
+  console.log(`[eonarga] banco: ${dbKind}`);
   await runMigrations();
   const result = await seedAll();
   if (result.categoriesCreated > 0) {

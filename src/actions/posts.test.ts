@@ -68,6 +68,7 @@ vi.mock("@/lib/auth/guards", () => ({
 
 let actions: PostsModule;
 let db: ClientModule["db"];
+let closeDb: ClientModule["closeDb"];
 let schema: SchemaModule;
 let clearAllRateLimits: RateLimitModule["clearAllRateLimits"];
 let tmpDir: string;
@@ -140,15 +141,14 @@ function pushedTo(): string[] {
 beforeAll(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "eonarga-posts-"));
   uploadDir = path.join(tmpDir, "uploads");
-  const file = path.join(tmpDir, "test.db").split(path.sep).join("/");
-  process.env.DATABASE_URL = `file:${file}`;
+  process.env.DATABASE_URL = "pglite://memory";
   // storage.ts lê UPLOAD_DIR no import: tem que estar de pé antes do primeiro import.
   process.env.UPLOAD_DIR = uploadDir;
 
   const { runMigrations } = await import("@/lib/db/migrate");
   await runMigrations();
 
-  ({ db } = await import("@/lib/db/client"));
+  ({ db, closeDb } = await import("@/lib/db/client"));
   schema = await import("@/lib/db/schema");
   ({ clearAllRateLimits } = await import("@/lib/rate-limit"));
   actions = await import("./posts");
@@ -189,8 +189,8 @@ beforeAll(async () => {
   ]);
 });
 
-afterAll(() => {
-  db.$client.close();
+afterAll(async () => {
+  await closeDb();
   try {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   } catch {
@@ -577,6 +577,7 @@ describe("comentário com foto ou áudio (docs/08 #52)", () => {
     expect(post.comments[0].photo).toEqual({
       id: comment.photoId,
       url: `/api/uploads/${comment.photoId}`,
+      mediumUrl: `/api/uploads/${comment.photoId}?v=medium`,
       thumbUrl: `/api/uploads/${comment.photoId}?v=thumb`,
       width: 120,
       height: 80,

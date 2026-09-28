@@ -394,7 +394,13 @@ export function NewPostForm({
   }
 
   return (
-    <form action={submit} className="flex flex-col gap-4">
+    <form
+      action={submit}
+      className="flex flex-col gap-4"
+      // Tamanho da foto que vai subir depois de encolhida (docs/08 #54). O e2e lê daqui:
+      // o Chrome não entrega corpo multipart pro Playwright.
+      data-photo-bytes={shrunk ? shrunk.file.size : undefined}
+    >
       <input type="hidden" name="placeId" value={chosen?.placeId ?? ""} />
       <input type="hidden" name="lat" value={chosen ? String(chosen.lat) : ""} />
       <input type="hidden" name="lng" value={chosen ? String(chosen.lng) : ""} />

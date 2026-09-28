@@ -19,8 +19,9 @@ export async function GET(request: Request, ctx: RouteContext<"/api/uploads/[id]
   const { id } = await ctx.params;
   if (!isValidImageId(id)) return badRequest("Imagem inválida.");
 
+  const requested = new URL(request.url).searchParams.get("v");
   const variant: ImageVariant =
-    new URL(request.url).searchParams.get("v") === "thumb" ? "thumb" : "full";
+    requested === "thumb" ? "thumb" : requested === "medium" ? "medium" : "full";
 
   const file = await readImage(id, variant);
   if (!file) return NextResponse.json({ error: "Não achei essa imagem." }, { status: 404 });

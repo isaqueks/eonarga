@@ -8,8 +8,10 @@ import { parseStoredPeaks } from "@/lib/audio";
 
 export interface MediaPhoto {
   id: string;
-  /** Variante grande. */
+  /** Variante grande (até 1600 px): a tela cheia. */
   url: string;
+  /** Até 800 px: o card no feed (docs/08 #56). */
+  mediumUrl: string;
   /** Quadrada, 400 px. */
   thumbUrl: string;
   width: number;
@@ -47,6 +49,7 @@ export function toMediaPhoto(row: PhotoColumns): MediaPhoto | null {
   return {
     id: row.photoId,
     url: `/api/uploads/${row.photoId}`,
+    mediumUrl: `/api/uploads/${row.photoId}?v=medium`,
     thumbUrl: `/api/uploads/${row.photoId}?v=thumb`,
     width: row.photoWidth ?? 0,
     height: row.photoHeight ?? 0,

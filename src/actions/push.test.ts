@@ -56,6 +56,7 @@ vi.mock("@/lib/auth/guards", () => ({
 
 let actions: PushActions;
 let db: ClientModule["db"];
+let closeDb: ClientModule["closeDb"];
 let schema: SchemaModule;
 let clearAllRateLimits: () => void;
 let tmpDir: string;
@@ -109,13 +110,12 @@ const AVISO = {
 
 beforeAll(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "eonarga-push-actions-"));
-  const file = path.join(tmpDir, "test.db").split(path.sep).join("/");
-  process.env.DATABASE_URL = `file:${file}`;
+  process.env.DATABASE_URL = "pglite://memory";
 
   const { runMigrations } = await import("@/lib/db/migrate");
   await runMigrations();
 
-  ({ db } = await import("@/lib/db/client"));
+  ({ db, closeDb } = await import("@/lib/db/client"));
   schema = await import("@/lib/db/schema");
   ({ clearAllRateLimits } = await import("@/lib/rate-limit"));
   actions = await import("./push");
@@ -161,8 +161,8 @@ beforeAll(async () => {
   ]);
 });
 
-afterAll(() => {
-  db.$client.close();
+afterAll(async () => {
+  await closeDb();
   try {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   } catch {

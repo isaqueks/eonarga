@@ -1,5 +1,5 @@
 import { asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { alias } from "drizzle-orm/pg-core";
 
 import { REACTION_EMOJIS } from "@/lib/constants";
 import { db } from "@/lib/db/client";

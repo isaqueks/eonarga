@@ -1,11 +1,34 @@
+# VPS só nosso, com Caddy próprio emitindo o certificado. Três containers: app, Postgres
+# (docs/08 #55) e Caddy. Pra testar local sem domínio: SITE_ADDRESS=localhost.
 services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: eonarga
+      POSTGRES_USER: eonarga
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C.UTF-8"
+    volumes:
+      - pg_data:/var/lib/postgresql
+    shm_size: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eonarga -d eonarga"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   app:
     build: .
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: file:/app/data/eonarga.db
+      DATABASE_URL: postgres://eonarga:${POSTGRES_PASSWORD}@db:5432/eonarga
       UPLOAD_DIR: /app/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - app_data:/app/data
     expose:
@@ -29,7 +52,9 @@ services:
       - app
 
 volumes:
-  # Banco SQLite + uploads. Backup: ver README.
+  # Uploads. Backup: deploy/backup.sh.
   app_data:
+  # Postgres. Backup: deploy/backup.sh.
+  pg_data:
   caddy_data:
   caddy_config:

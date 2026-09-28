@@ -371,8 +371,18 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await shot(page, "17-404");
 
   await page.goto("/perfil");
-  await page.getByRole("button", { name: "Sair" }).click();
-  await page.waitForURL(/\/login/);
+  // Em dev o clique pode cair antes da hidratação e se perder (a action nem é chamada):
+  // repete até a sessão cair de verdade.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.getByRole("button", { name: "Sair" }).click();
+    try {
+      await page.waitForURL(/\/login/, { timeout: 15_000 });
+      break;
+    } catch {
+      // ainda logado: tenta de novo
+    }
+  }
+  await expect(page).toHaveURL(/\/login/);
 
   expect(cspErrors, "a CSP bloqueou alguma coisa durante o fluxo").toEqual([]);
 });
@@ -675,18 +685,16 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await expect(publicar2).toBeEnabled();
   await expect(page.getByText("Preparando a foto…")).toHaveCount(0);
   await shot(page, "21-postar-foto");
-  const envios: import("@playwright/test").Request[] = [];
-  page.on("request", (request) => {
-    if (request.method() === "POST" && /\/feed\/novo/.test(request.url())) envios.push(request);
-  });
+  // O que vai subir é a foto encolhida no aparelho, não os 3 MB do arquivo (docs/08 #54).
+  // O Chrome não expõe corpo multipart pro Playwright, então o formulário anota o tamanho.
+  const formulario = page.locator("form[data-photo-bytes]");
+  await expect(formulario).toHaveCount(1);
+  const tamanhoEnvio = Number(await formulario.getAttribute("data-photo-bytes"));
+  expect(tamanhoEnvio).toBeGreaterThan(10_000);
+  expect(tamanhoEnvio).toBeLessThan(fotoPost.byteLength * 0.7);
   await publicar2.click();
 
   await page.waitForURL(/\/feed$/);
-  // O que subiu foi a foto encolhida, não os 3 MB do arquivo.
-  expect(envios.length).toBeGreaterThan(0);
-  const tamanhoEnvio = (await envios[0].sizes()).requestBodySize;
-  expect(tamanhoEnvio).toBeGreaterThan(10_000);
-  expect(tamanhoEnvio).toBeLessThan(fotoPost.byteLength * 0.7);
   // Dois cards têm "Foto de Admin" agora (este post e o comentário com foto no post de
   // texto): o da foto é o que não carrega o texto do primeiro post.
   const cardFoto = page
@@ -730,8 +738,9 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   const cardVideo = page.locator("article").filter({ hasText: "Vídeo do rolê" });
   const video = cardVideo.getByLabel("Vídeo de Admin");
   await expect(video).toBeVisible({ timeout: 30_000 });
+  // O `src` só entra quando o card está perto da tela (docs/08 #56): espera ele chegar.
+  await expect(video).toHaveAttribute("src", /^\/api\/videos\/[A-Za-z0-9_-]+\.mp4#t=0\.001$/);
   const videoSrc = (await video.getAttribute("src")) ?? "";
-  expect(videoSrc).toMatch(/^\/api\/videos\/[A-Za-z0-9_-]+\.mp4#t=0\.001$/);
   // O `<video>` busca por trechos: a rota tem que responder 206 com Range.
   const parcial = await page.request.get(videoSrc.split("#")[0], {
     headers: { range: "bytes=0-99" },

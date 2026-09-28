@@ -1,103 +1,12 @@
 {
   "version": "7",
-  "dialect": "sqlite",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "6",
-      "when": 1788369019930,
+      "version": "7",
+      "when": 1790606843618,
       "tag": "0000_init",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1788375274128,
-      "tag": "0001_perfil-genero-testosterona",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1788376487979,
-      "tag": "0002_avatar",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1788380421097,
-      "tag": "0003_comentarios-e-tags",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1788387745923,
-      "tag": "0004_push-e-varias-avaliacoes",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1788389908521,
-      "tag": "0005_posts",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1788391479730,
-      "tag": "0006_last-seen",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1788457980990,
-      "tag": "0007_reacoes-e-comentarios-em-posts",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1788481558275,
-      "tag": "0008_importar-instagram",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1788565449376,
-      "tag": "0009_videos-em-posts",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "6",
-      "when": 1788635297787,
-      "tag": "0010_curtidas-em-comentarios",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "6",
-      "when": 1788705483363,
-      "tag": "0011_audio-em-post",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "6",
-      "when": 1788872214558,
-      "tag": "0012_flop-de-post",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "6",
-      "when": 1788959133777,
-      "tag": "0013_midia-em-comentario",
       "breakpoints": true
     }
   ]

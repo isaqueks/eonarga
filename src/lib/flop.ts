@@ -100,8 +100,9 @@ export async function sweepFlops(now: Date = new Date()): Promise<FloppedPost[]>
       const marked = await tx
         .update(posts)
         .set({ floppedAt: at, updatedAt: at })
-        .where(and(eq(posts.id, post.id), isNull(posts.floppedAt)));
-      if (marked.rowsAffected === 0) return false;
+        .where(and(eq(posts.id, post.id), isNull(posts.floppedAt)))
+        .returning({ id: posts.id });
+      if (marked.length === 0) return false;
 
       // O aviso herda o "de onde" do original (a coluna é obrigatória) e o autor, pra
       // sumir junto com ele e com a pessoa.

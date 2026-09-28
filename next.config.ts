@@ -14,16 +14,16 @@ const nextConfig: NextConfig = {
   // Imagem Docker usa .next/standalone (ver Dockerfile).
   output: "standalone",
   reactStrictMode: true,
-  // Pacotes com binário nativo ficam fora do bundle e são resolvidos do node_modules.
-  serverExternalPackages: ["@libsql/client", "libsql", "@node-rs/argon2", "sharp"],
-  // Garante que o standalone leve os binários por plataforma e as migrations.
+  // Pacotes com binário nativo (ou com `require` opcional, caso do pg) ficam fora do
+  // bundle e são resolvidos do node_modules.
+  serverExternalPackages: ["pg", "@electric-sql/pglite", "@node-rs/argon2", "sharp"],
+  // Garante que o standalone leve os binários por plataforma e as migrations…
   outputFileTracingIncludes: {
-    "/**/*": [
-      "./drizzle/**/*",
-      "./node_modules/@libsql/**/*",
-      "./node_modules/libsql/**/*",
-      "./node_modules/@node-rs/**/*",
-    ],
+    "/**/*": ["./drizzle/**/*", "./node_modules/@node-rs/**/*"],
+  },
+  // …e não leve o PGlite, que é só de dev/teste (docs/08 #55).
+  outputFileTracingExcludes: {
+    "/**/*": ["./node_modules/@electric-sql/pglite/**/*"],
   },
   images: {
     formats: ["image/avif", "image/webp"],
@@ -41,6 +41,22 @@ const nextConfig: NextConfig = {
         // Headers de segurança do docs/05, em todas as rotas.
         source: "/(.*)",
         headers: securityHeaders(),
+      },
+      {
+        // Ícones, logo e o cachorro do captcha não mudam de nome quando mudam de conteúdo,
+        // mas mudam raramente: uma semana no navegador e na borda da Cloudflare (que só
+        // guarda o que tem `public`). Sem isso o Next manda `max-age=0` e cada abertura
+        // do app baixa de novo (docs/08 #56).
+        source: "/:path(icons|captcha)/:file*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        source: "/:file(logo.jpg|eonarga.jpg|favicon.ico|apple-touch-icon.png)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+        ],
       },
       {
         // O service worker nunca pode vir do cache do navegador, senão uma versão

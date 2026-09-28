@@ -10,6 +10,7 @@ type SchemaModule = typeof import("@/lib/db/schema");
 
 let auth: SessionModule;
 let db: ClientModule["db"];
+let closeDb: ClientModule["closeDb"];
 let schema: SchemaModule;
 let tmpDir: string;
 
@@ -19,13 +20,12 @@ const OTHER_USER_ID = "user-teste-2";
 beforeAll(async () => {
   // Banco descartável: precisa existir ANTES de o client ser importado (ele lê DATABASE_URL no load).
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "eonarga-session-"));
-  const file = path.join(tmpDir, "test.db").split(path.sep).join("/");
-  process.env.DATABASE_URL = `file:${file}`;
+  process.env.DATABASE_URL = "pglite://memory";
 
   const { runMigrations } = await import("@/lib/db/migrate");
   await runMigrations();
 
-  ({ db } = await import("@/lib/db/client"));
+  ({ db, closeDb } = await import("@/lib/db/client"));
   schema = await import("@/lib/db/schema");
   auth = await import("./session");
 
@@ -35,8 +35,8 @@ beforeAll(async () => {
   ]);
 });
 
-afterAll(() => {
-  db.$client.close();
+afterAll(async () => {
+  await closeDb();
   try {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   } catch {
@@ -46,7 +46,7 @@ afterAll(() => {
 
 beforeEach(async () => {
   await db.delete(schema.sessions);
-  await db.update(schema.users).set({ isActive: true }).where(eq(schema.users.id, USER_ID)).run();
+  await db.update(schema.users).set({ isActive: true }).where(eq(schema.users.id, USER_ID));
 });
 
 async function setExpiry(sessionId: string, at: Date) {
@@ -129,11 +129,7 @@ describe("validateSessionToken", () => {
 
   it("rejeita usuário desativado", async () => {
     const { token, sessionId } = await auth.createSession(USER_ID);
-    await db
-      .update(schema.users)
-      .set({ isActive: false })
-      .where(eq(schema.users.id, USER_ID))
-      .run();
+    await db.update(schema.users).set({ isActive: false }).where(eq(schema.users.id, USER_ID));
 
     expect(await auth.validateSessionToken(token)).toBeNull();
     // A linha continua lá; quem derruba as sessões é o `setUserActive`.

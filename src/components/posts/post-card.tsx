@@ -37,7 +37,12 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
     id: comment.id,
     body: comment.body,
     photo: comment.photo
-      ? { url: comment.photo.url, width: comment.photo.width, height: comment.photo.height }
+      ? {
+          url: comment.photo.url,
+          mediumUrl: comment.photo.mediumUrl,
+          width: comment.photo.width,
+          height: comment.photo.height,
+        }
       : null,
     audio: comment.audio
       ? {

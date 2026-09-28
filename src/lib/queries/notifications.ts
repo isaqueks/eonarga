@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
 import { NOTIFICATION_KINDS, notifications, places, users } from "@/lib/db/schema";

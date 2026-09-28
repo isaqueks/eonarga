@@ -1,16 +1,19 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  bigint,
+  boolean,
+  doublePrecision,
   index,
   integer,
+  pgTable,
   primaryKey,
-  real,
-  sqliteTable,
   text,
-  type AnySQLiteColumn,
-} from "drizzle-orm/sqlite-core";
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
 
-// Datas em ISO 8601 UTC, geradas pelo SQLite. updated_at é responsabilidade do app nos UPDATEs.
-const nowIso = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
+// Datas em ISO 8601 UTC (`text`), no mesmo formato do `toISOString()` do JS, geradas pelo
+// Postgres quando o app não manda. updated_at é responsabilidade do app nos UPDATEs.
+const nowIso = sql`to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 const createdAt = () => text("created_at").notNull().default(nowIso);
 const updatedAt = () => text("updated_at").notNull().default(nowIso);
 
@@ -22,14 +25,14 @@ export const USER_PLACE_STATUS = ["want", "visited"] as const;
 import { REACTION_EMOJIS } from "../constants";
 export { REACTION_EMOJIS };
 
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: text("role", { enum: ROLES }).notNull().default("member"),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   lastLoginAt: text("last_login_at"),
   // "Visto por último": atualizado a cada uso (com folga de 5 min), não só no login.
   lastSeenAt: text("last_seen_at"),
@@ -38,12 +41,13 @@ export const users = sqliteTable("users", {
   // Campos de zoeira do perfil (docs/08 #25). Admin escreve o que quiser; membro escolhe da lista.
   gender: text("gender"),
   // ng/dL. Membro vai até 1200; admin não tem teto.
-  testosterone: integer("testosterone"),
+  // Número livre (a galera digita 3141592653589): int4 não cabe, bigint lido como number.
+  testosterone: bigint("testosterone", { mode: "number" }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
 
-export const sessions = sqliteTable(
+export const sessions = pgTable(
   "sessions",
   {
     // sha256 do token que vai no cookie; o token cru nunca é salvo
@@ -58,7 +62,7 @@ export const sessions = sqliteTable(
   (t) => [index("sessions_user_idx").on(t.userId)],
 );
 
-export const categories = sqliteTable("categories", {
+export const categories = pgTable("categories", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
   slug: text("slug").notNull().unique(),
@@ -67,7 +71,7 @@ export const categories = sqliteTable("categories", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-export const places = sqliteTable(
+export const places = pgTable(
   "places",
   {
     id: text("id").primaryKey(),
@@ -79,8 +83,8 @@ export const places = sqliteTable(
     description: text("description"),
     tips: text("tips"),
     address: text("address"),
-    lat: real("lat").notNull(),
-    lng: real("lng").notNull(),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
     googleMapsUrl: text("google_maps_url"),
     googlePlaceId: text("google_place_id"),
     instagram: text("instagram"),
@@ -101,7 +105,7 @@ export const places = sqliteTable(
   ],
 );
 
-export const reviews = sqliteTable(
+export const reviews = pgTable(
   "reviews",
   {
     id: text("id").primaryKey(),
@@ -126,7 +130,7 @@ export const reviews = sqliteTable(
   ],
 );
 
-export const userPlaceStatus = sqliteTable(
+export const userPlaceStatus = pgTable(
   "user_place_status",
   {
     userId: text("user_id")
@@ -141,7 +145,7 @@ export const userPlaceStatus = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.placeId] })],
 );
 
-export const reviewReactions = sqliteTable(
+export const reviewReactions = pgTable(
   "review_reactions",
   {
     reviewId: text("review_id")
@@ -178,7 +182,7 @@ function commentMediaColumns() {
  * Respostas numa avaliação: thread curta, sem aninhamento (docs/01 — v2).
  * Some junto com a avaliação e com quem escreveu.
  */
-export const reviewComments = sqliteTable(
+export const reviewComments = pgTable(
   "review_comments",
   {
     id: text("id").primaryKey(),
@@ -202,7 +206,7 @@ export const reviewComments = sqliteTable(
  * Curtidas em respostas (docs/08 #43): uma por pessoa por resposta, sem emoji —
  * comentário só tem "curtir". Some junto com a resposta e com a pessoa.
  */
-export const reviewCommentLikes = sqliteTable(
+export const reviewCommentLikes = pgTable(
   "review_comment_likes",
   {
     commentId: text("comment_id")
@@ -221,7 +225,7 @@ export const reviewCommentLikes = sqliteTable(
  * (minúscula, sem acento, só [a-z0-9 ]) — ver src/lib/tags.ts —, então a PK
  * composta já serve de dedupe e o índice em `tag` serve pro filtro do ranking.
  */
-export const placeTags = sqliteTable(
+export const placeTags = pgTable(
   "place_tags",
   {
     placeId: text("place_id")
@@ -237,7 +241,7 @@ export const placeTags = sqliteTable(
 );
 
 // v2, mas já modelado pra não precisar de migration depois.
-export const photos = sqliteTable(
+export const photos = pgTable(
   "photos",
   {
     id: text("id").primaryKey(),
@@ -256,7 +260,7 @@ export const photos = sqliteTable(
 );
 
 // Web Push (docs/08 #29). Uma linha por aparelho/navegador que aceitou notificações.
-export const pushSubscriptions = sqliteTable(
+export const pushSubscriptions = pgTable(
   "push_subscriptions",
   {
     id: text("id").primaryKey(),
@@ -289,7 +293,7 @@ export const NOTIFICATION_KINDS = [
 ] as const;
 
 // Histórico do que foi disparado: "Chamar galera pra cá", avisos do admin e comentários em post.
-export const notifications = sqliteTable(
+export const notifications = pgTable(
   "notifications",
   {
     id: text("id").primaryKey(),
@@ -319,7 +323,7 @@ export const notifications = sqliteTable(
  * `lat/lng` são sempre gravados, mesmo com `place_id`: se o lugar for arquivado (ou
  * o `place_id` virar null), o post continua sabendo de onde foi.
  */
-export const posts = sqliteTable(
+export const posts = pgTable(
   "posts",
   {
     id: text("id").primaryKey(),
@@ -332,8 +336,8 @@ export const posts = sqliteTable(
     photoWidth: integer("photo_width"),
     photoHeight: integer("photo_height"),
     placeId: text("place_id").references(() => places.id, { onDelete: "set null" }),
-    lat: real("lat").notNull(),
-    lng: real("lng").notNull(),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
     address: text("address"),
     // Vídeo do post (docs/08 #39): id no storage + extensão (`mp4`/`webm`) e dimensões.
     // Com vídeo, `photo_id` (se houver) é a capa.
@@ -354,7 +358,7 @@ export const posts = sqliteTable(
     // sai de novo, mesmo que o aviso seja apagado). No aviso ("O post de Fulano flopou
     // 200%"), `flop_of_post_id` aponta pro post que flopou; o `user_id` é o do autor
     // do original, e o aviso some junto com ele.
-    flopOfPostId: text("flop_of_post_id").references((): AnySQLiteColumn => posts.id, {
+    flopOfPostId: text("flop_of_post_id").references((): AnyPgColumn => posts.id, {
       onDelete: "cascade",
     }),
     floppedAt: text("flopped_at"),
@@ -368,7 +372,7 @@ export const posts = sqliteTable(
  * Reações num post do feed: a mesma lista fixa de emojis das avaliações
  * (`REACTION_EMOJIS`). Some junto com o post e com quem reagiu.
  */
-export const postReactions = sqliteTable(
+export const postReactions = pgTable(
   "post_reactions",
   {
     postId: text("post_id")
@@ -387,7 +391,7 @@ export const postReactions = sqliteTable(
  * Comentários num post: thread curta, sem aninhamento, igual às respostas de
  * avaliação. Some junto com o post e com quem escreveu.
  */
-export const postComments = sqliteTable(
+export const postComments = pgTable(
   "post_comments",
   {
     id: text("id").primaryKey(),
@@ -408,7 +412,7 @@ export const postComments = sqliteTable(
 );
 
 /** Curtidas em comentários de post: o mesmo desenho de `review_comment_likes`. */
-export const postCommentLikes = sqliteTable(
+export const postCommentLikes = pgTable(
   "post_comment_likes",
   {
     commentId: text("comment_id")

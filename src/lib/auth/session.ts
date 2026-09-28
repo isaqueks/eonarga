@@ -50,12 +50,12 @@ export async function validateSessionToken(token: string): Promise<SessionWithUs
   if (!token) return null;
   const sessionId = hashSessionToken(token);
 
-  const row = await db
+  const [row] = await db
     .select({ session: sessions, user: users })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .where(eq(sessions.id, sessionId))
-    .get();
+    .limit(1);
 
   if (!row) return null;
 

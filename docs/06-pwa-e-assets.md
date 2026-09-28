@@ -175,6 +175,18 @@ só o root layout. Cachorro + "Sem internet. E o narga? Fica pra depois." + "Ten
   nada é privado dentro do grupo (docs/01), mas quem sair do app num celular emprestado pode ver
   a última tela em cache offline. Se incomodar, dá pra limpar os caches no logout.
 
+### Peso da mídia (docs/08 #56)
+
+O que pesa no feed não é o HTML (16–18 kB comprimidos) e sim as fotos e os vídeos, que são
+privados e por isso a Cloudflare não cacheia (`cf-cache-status: DYNAMIC`/`BYPASS`). Três
+medidas: o card mostra a variante `medium` da foto (`/api/uploads/<id>?v=medium`, até 800 px,
+gerada da `full` na primeira leitura e guardada; a tela cheia segue na `full`); o `<video>`
+só recebe `src` quando o card chega a uma tela de distância (`PostVideo`, IntersectionObserver),
+em vez de oito vídeos pedindo metadados de uma vez; e os estáticos públicos (`/icons`, `/captcha`,
+`logo.jpg`) saem com `Cache-Control` de uma semana em vez do `max-age=0` do Next, então a
+Cloudflare passa a servi-los da borda. O cache de uploads do SW (`eonarga-uploads`) guarda a
+`medium` como qualquer outra URL de `/api/uploads/`.
+
 ## Instalação
 
 `src/components/pwa/install-app-button.tsx` (com o `beforeinstallprompt` guardado em `install-prompt-store.ts`), renderizado no topo do Ranking e do Feed.

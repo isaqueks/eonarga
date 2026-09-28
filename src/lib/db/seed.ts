@@ -23,8 +23,9 @@ export async function seedCategories() {
     const res = await db
       .insert(categories)
       .values({ id: nanoid(12), ...c, sortOrder: i })
-      .onConflictDoNothing({ target: categories.slug });
-    created += res.rowsAffected;
+      .onConflictDoNothing({ target: categories.slug })
+      .returning({ id: categories.id });
+    created += res.length;
   }
   return created;
 }

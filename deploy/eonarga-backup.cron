@@ -1,0 +1,4 @@
+# Copie pra /etc/cron.d/eonarga-backup (dono root, modo 0644). Roda o backup às 4h17 da manhã.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+17 4 * * * root /opt/eonarga/deploy/backup.sh >> /var/log/eonarga-backup.log 2>&1
