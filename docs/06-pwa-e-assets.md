@@ -180,7 +180,7 @@ só o root layout. Cachorro + "Sem internet. E o narga? Fica pra depois." + "Ten
 O que pesa no feed não é o HTML (16–18 kB comprimidos) e sim as fotos e os vídeos, que são
 privados e por isso a Cloudflare não cacheia (`cf-cache-status: DYNAMIC`/`BYPASS`). Três
 medidas: o card mostra a variante `medium` da foto (`/api/uploads/<id>?v=medium`, até 800 px,
-gerada da `full` na primeira leitura e guardada; a tela cheia segue na `full`); o `<video>`
+gerada da `full` na primeira leitura e guardada; a capa do vídeo também; a tela cheia segue na `full`); o `<video>`
 só recebe `src` quando o card chega a uma tela de distância (`PostVideo`, IntersectionObserver),
 em vez de oito vídeos pedindo metadados de uma vez; e os estáticos públicos (`/icons`, `/captcha`,
 `logo.jpg`) saem com `Cache-Control` de uma semana em vez do `max-age=0` do Next, então a

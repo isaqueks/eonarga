@@ -108,7 +108,7 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
       {post.video ? (
         <PostVideo
           video={post.video}
-          poster={post.photo?.url ?? null}
+          poster={post.photo?.mediumUrl ?? null}
           authorName={post.author.name}
         />
       ) : post.photo ? (
