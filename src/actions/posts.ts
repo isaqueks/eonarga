@@ -25,10 +25,20 @@ import {
 } from "@/lib/comment-media";
 import { COMMENT_MAX } from "@/lib/constants";
 import { db } from "@/lib/db/client";
-import { notifications, places, postComments, postReactions, posts } from "@/lib/db/schema";
+import {
+  notifications,
+  places,
+  postComments,
+  postPollOptions,
+  postPollVotes,
+  postReactions,
+  posts,
+} from "@/lib/db/schema";
 import { notifyMentions } from "@/lib/notify-mentions";
+import { nextVotes, parsePollOptions, POLL_NO_MEDIA, POLL_NO_QUESTION } from "@/lib/polls";
 import { commentMediaKind, commentNotificationBody, postInputSchema } from "@/lib/posts";
 import { avatarIcon, isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
+import { getPostPoll, type PostPoll } from "@/lib/queries/posts";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isReactionEmoji } from "@/lib/reviews";
 import { discardStagedImport, takeStagedImport } from "@/lib/staged-imports";
@@ -67,6 +77,9 @@ const IMPORT_EXPIRED = "A foto importada venceu. Importa de novo.";
 const SAVE_FAILED = "Não deu pra salvar. Tenta de novo.";
 const POST_NOT_FOUND = "Não achei esse post.";
 const NOT_YOURS = "Só quem postou (ou admin) pode apagar.";
+const OPTION_NOT_FOUND = "Essa opção não existe mais.";
+/** 60 toques por minuto por pessoa: dá pra mudar de ideia à vontade, não pra martelar. */
+const POLL_VOTE_RATE_LIMIT = { limit: 60, windowMs: 60 * 1000 };
 
 /**
  * Publica um post no feed: foto e/ou texto, sempre com quem postou e de onde
@@ -81,6 +94,10 @@ const NOT_YOURS = "Só quem postou (ou admin) pode apagar.";
  * conferidos pelos magic bytes; o que separa um do outro é o tipo que o formulário
  * declarou (o gravador manda `audio/…`), porque um WebM só de som tem o mesmo cabeçalho
  * de um WebM com imagem.
+ *
+ * Enquete (docs/08 #57): com `poll=1`, o texto é a pergunta (obrigatória), os campos
+ * `pollOption` são as opções (2 a 12, sem repetir) e `pollMultiple=1` deixa marcar
+ * várias. Enquete não leva mídia.
  */
 export async function createPost(_prevState: FormState, formData: FormData): Promise<FormState> {
   const { user } = await assertUser();
@@ -113,6 +130,14 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
   }
   const input = parsed.data;
 
+  let poll: { options: string[]; multiple: boolean } | null = null;
+  if (field(formData, "poll") === "1") {
+    if (!input.body) return { ok: false, fieldErrors: { body: POLL_NO_QUESTION } };
+    const options = parsePollOptions(formData.getAll("pollOption"));
+    if (!options.ok) return { ok: false, fieldErrors: { poll: options.error } };
+    poll = { options: options.options, multiple: field(formData, "pollMultiple") === "1" };
+  }
+
   // Quatro inputs no formulário (câmera de foto, câmera de vídeo, gravador de áudio,
   // galeria); vale o primeiro que veio com arquivo. Áudio é o que veio pelo `audio` ou
   // se declarou `audio/*`; foto ou vídeo é decidido pelos magic bytes.
@@ -126,6 +151,9 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
     hasUpload && (upload.name === "audio" || upload.value.type.startsWith("audio/"));
   // Mídia importada do Instagram: já está no storage, "no palco" (docs/08 #37).
   const importedPhotoId = field(formData, "importedPhotoId").trim();
+  if (poll && (hasUpload || importedPhotoId)) {
+    return { ok: false, fieldErrors: { poll: POLL_NO_MEDIA } };
+  }
   if (hasUpload && isAudioUpload && upload.value.size > MAX_AUDIO_BYTES) {
     return { ok: false, fieldErrors: { photo: AUDIO_TOO_BIG } };
   }
@@ -219,27 +247,38 @@ export async function createPost(_prevState: FormState, formData: FormData): Pro
 
   const postId = nanoid(12);
   try {
-    await db.insert(posts).values({
-      id: postId,
-      userId: user.id,
-      body: input.body,
-      photoId: saved?.id ?? null,
-      photoWidth: saved?.width ?? null,
-      photoHeight: saved?.height ?? null,
-      videoId: video?.id ?? null,
-      videoExt: video?.ext ?? null,
-      videoWidth: video?.width ?? null,
-      videoHeight: video?.height ?? null,
-      audioId: audio?.id ?? null,
-      audioExt: audio?.ext ?? null,
-      audioDurationMs: audio?.durationMs ?? null,
-      audioPeaks: audio?.peaks ? JSON.stringify(audio.peaks) : null,
-      placeId: place?.id ?? null,
-      lat: input.lat,
-      lng: input.lng,
-      address: input.address,
-      sourceUrl: source?.url ?? null,
-      sourceAuthor: source?.author ?? null,
+    await db.transaction(async (tx) => {
+      await tx.insert(posts).values({
+        id: postId,
+        userId: user.id,
+        body: input.body,
+        photoId: saved?.id ?? null,
+        photoWidth: saved?.width ?? null,
+        photoHeight: saved?.height ?? null,
+        videoId: video?.id ?? null,
+        videoExt: video?.ext ?? null,
+        videoWidth: video?.width ?? null,
+        videoHeight: video?.height ?? null,
+        audioId: audio?.id ?? null,
+        audioExt: audio?.ext ?? null,
+        audioDurationMs: audio?.durationMs ?? null,
+        audioPeaks: audio?.peaks ? JSON.stringify(audio.peaks) : null,
+        placeId: place?.id ?? null,
+        lat: input.lat,
+        lng: input.lng,
+        address: input.address,
+        sourceUrl: source?.url ?? null,
+        sourceAuthor: source?.author ?? null,
+        pollMultiple: poll ? poll.multiple : null,
+      });
+      // Post e opções entram juntos: enquete sem opção não existe.
+      if (poll) {
+        await tx
+          .insert(postPollOptions)
+          .values(
+            poll.options.map((text, position) => ({ id: nanoid(12), postId, text, position })),
+          );
+      }
     });
   } catch {
     // Sem linha no banco a mídia é lixo: apaga os arquivos em vez de deixar órfão.
@@ -510,4 +549,65 @@ export async function deletePostComment(commentId: string): Promise<FormState> {
 
   revalidatePath("/feed");
   return { ok: true };
+}
+
+// --- Enquete -------------------------------------------------------------------
+
+/**
+ * Vota numa opção da enquete (docs/08 #57). Qualquer membro vota, inclusive quem criou.
+ * Com uma resposta só, votar em outra opção troca o voto e tocar na própria tira; com
+ * várias, cada toque liga ou desliga aquela opção (`nextVotes`). Devolve a enquete
+ * inteira já com o voto, pro card atualizar contagem e rostos sem recarregar.
+ *
+ * Voto não manda push nem vira linha no feed, como no WhatsApp; mas conta como sinal de
+ * vida pro flop (`src/lib/flop.ts`).
+ */
+export async function votePoll(
+  postId: string,
+  optionId: string,
+): Promise<FormState & { poll?: PostPoll }> {
+  const { user } = await assertUser();
+  if (typeof postId !== "string" || typeof optionId !== "string" || !postId || !optionId) {
+    return { ok: false, error: OPTION_NOT_FOUND };
+  }
+
+  const found = await db
+    .select({ id: postPollOptions.id, multiple: posts.pollMultiple })
+    .from(postPollOptions)
+    .innerJoin(posts, eq(posts.id, postPollOptions.postId))
+    .where(and(eq(postPollOptions.id, optionId), eq(postPollOptions.postId, postId)))
+    .limit(1);
+  const option = found[0];
+  if (!option) return { ok: false, error: OPTION_NOT_FOUND };
+
+  if (!checkRateLimit(`poll-vote:${user.id}`, POLL_VOTE_RATE_LIMIT).ok) {
+    return { ok: false, error: TOO_MANY };
+  }
+
+  const mineHere = and(eq(postPollVotes.postId, postId), eq(postPollVotes.userId, user.id));
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ optionId: postPollVotes.optionId })
+      .from(postPollVotes)
+      .where(mineHere);
+    const current = rows.map((row) => row.optionId);
+    const next = nextVotes(current, option.id, option.multiple === true);
+
+    // Só o que mudou: voto que fica não perde a data (é ela que ordena os rostos).
+    for (const id of current) {
+      if (next.includes(id)) continue;
+      await tx.delete(postPollVotes).where(and(mineHere, eq(postPollVotes.optionId, id)));
+    }
+    const added = next.filter((id) => !current.includes(id));
+    if (added.length > 0) {
+      await tx
+        .insert(postPollVotes)
+        .values(added.map((id) => ({ optionId: id, userId: user.id, postId })))
+        .onConflictDoNothing();
+    }
+  });
+
+  const poll = await getPostPoll(postId, user.id);
+  revalidatePath("/feed");
+  return poll ? { ok: true, poll } : { ok: true };
 }

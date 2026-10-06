@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { MentionTextarea } from "@/components/mentions/mention-textarea";
 import { shrinkImage } from "@/lib/image-client";
 import { detectImportLink, type ImportProvider } from "@/lib/import-links";
+import { parsePollOptions, POLL_MAX_OPTIONS, POLL_MIN_OPTIONS, POLL_OPTION_MAX } from "@/lib/polls";
 import { formatLatLng, haversineMeters, nearestPlace, POST_BODY_MAX } from "@/lib/posts";
 import { AUDIO_MAX_BYTES, PHOTO_MAX_BYTES, VIDEO_MAX_BYTES } from "@/lib/constants";
 import type { PostPlaceOption } from "@/lib/queries/posts";
@@ -124,6 +125,11 @@ export function NewPostForm({
   const [shrunk, setShrunk] = useState<{ field: string; file: File } | null>(null);
   const [shrinking, setShrinking] = useState(false);
   const shrinkRunRef = useRef(0);
+  // Enquete (docs/08 #57): a pergunta é o texto do post e cada opção vai num campo
+  // `pollOption`. Enquete não leva mídia, então ligar ela tira o que estava escolhido.
+  const [pollOn, setPollOn] = useState(false);
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [pollMultiple, setPollMultiple] = useState(false);
   // Áudio gravado no app: não passa por input, vai direto no FormData ao publicar.
   const [recording, setRecording] = useState(false);
   const [recorded, setRecorded] = useState<Recording | null>(null);
@@ -330,6 +336,35 @@ export function NewPostForm({
     setMediaError(null);
   }
 
+  function startPoll() {
+    clearMedia();
+    setRecording(false);
+    setIgOpen(false);
+    setPollOn(true);
+  }
+
+  function stopPoll() {
+    setPollOn(false);
+    setPollOptions(["", ""]);
+    setPollMultiple(false);
+  }
+
+  function setPollOption(index: number, value: string) {
+    setPollOptions((current) => {
+      const next = current.map((option, i) => (i === index ? value : option));
+      // Como no WhatsApp: escreveu na última, nasce mais uma em branco.
+      const last = index === next.length - 1;
+      if (last && value.trim() !== "" && next.length < POLL_MAX_OPTIONS) next.push("");
+      return next;
+    });
+  }
+
+  function removePollOption(index: number) {
+    setPollOptions((current) =>
+      current.length <= POLL_MIN_OPTIONS ? current : current.filter((_, i) => i !== index),
+    );
+  }
+
   /** Instagram ou TikTok, pelo link: as duas actions devolvem o mesmo formato. */
   const importFromLink = useCallback((raw: string) => {
     setIgError(null);
@@ -381,7 +416,15 @@ export function NewPostForm({
     importFromLink(sharedLink.url);
   }, [sharedLink, importFromLink]);
 
-  const canPublish = chosen !== null && (hasMedia || body.trim().length > 0) && !shrinking;
+  const pollCheck = pollOn ? parsePollOptions(pollOptions) : null;
+  const pollFilled = pollOptions.filter((option) => option.trim() !== "").length;
+  // Opção repetida aparece enquanto a pessoa digita; "faltam opções" fica pro rodapé.
+  const pollHint =
+    pollCheck && !pollCheck.ok && pollFilled >= POLL_MIN_OPTIONS ? pollCheck.error : null;
+  const hasContent = pollOn
+    ? body.trim().length > 0 && pollCheck?.ok === true
+    : hasMedia || body.trim().length > 0;
+  const canPublish = chosen !== null && hasContent && !shrinking;
 
   /**
    * A gravação vai no FormData na hora de publicar, como se fosse um input `audio`; a
@@ -448,7 +491,25 @@ export function NewPostForm({
           aria-label="Foto, vídeo ou áudio da galeria"
           onChange={handleFileChange}
         />
-        {recording ? (
+        {pollOn ? (
+          <div className="border-border flex items-center justify-between gap-3 rounded-xl border p-3">
+            <p className="text-sm leading-5">
+              <span aria-hidden>📊 </span>
+              <span className="font-medium">Enquete.</span> A pergunta vai no texto e as opções logo
+              abaixo.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-10 shrink-0"
+              onClick={stopPoll}
+            >
+              <X className="size-4" aria-hidden />
+              Desistir
+            </Button>
+          </div>
+        ) : recording ? (
           <AudioRecorder onDone={finishRecording} onCancel={() => setRecording(false)} />
         ) : preview?.kind === "audio" ? (
           <div className="flex flex-col gap-2">
@@ -561,7 +622,18 @@ export function NewPostForm({
             Preparando a foto…
           </p>
         ) : null}
-        {!preview && !recording ? (
+        {!preview && !recording && !pollOn ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            className="h-12 w-full text-base"
+            onClick={startPoll}
+          >
+            📊 Fazer enquete
+          </Button>
+        ) : null}
+        {!preview && !recording && !pollOn ? (
           <Button
             type="button"
             variant="outline"
@@ -573,7 +645,7 @@ export function NewPostForm({
             📥 Importar do Instagram ou TikTok
           </Button>
         ) : null}
-        {igOpen && !preview ? (
+        {igOpen && !preview && !pollOn ? (
           <div className="border-border flex flex-col gap-2 rounded-xl border p-3">
             <label htmlFor="ig-url" className="text-sm font-medium">
               Cola o link do post ou do vídeo
@@ -630,7 +702,7 @@ export function NewPostForm({
           name="body"
           value={body}
           onValueChange={setBody}
-          placeholder="O que tá rolando?"
+          placeholder={pollOn ? "Qual é a pergunta?" : "O que tá rolando?"}
           maxLength={POST_BODY_MAX}
           rows={3}
           aria-label="Texto do post"
@@ -650,6 +722,63 @@ export function NewPostForm({
           </span>
         </div>
       </section>
+
+      {/* 2b. Opções da enquete */}
+      {pollOn ? (
+        <section className="border-border flex flex-col gap-2 rounded-xl border p-3">
+          <input type="hidden" name="poll" value="1" />
+          <h2 className="text-sm font-medium">Opções</h2>
+          {pollOptions.map((option, index) => (
+            <div key={index} className="flex gap-2">
+              <Input
+                name="pollOption"
+                value={option}
+                onChange={(event) => setPollOption(index, event.target.value)}
+                onKeyDown={(event) => {
+                  // Enter aqui não publica: é só mais uma linha da lista.
+                  if (event.key === "Enter") event.preventDefault();
+                }}
+                maxLength={POLL_OPTION_MAX}
+                autoComplete="off"
+                enterKeyHint="next"
+                placeholder={
+                  index < POLL_MIN_OPTIONS ? `Opção ${index + 1}` : "Mais uma (opcional)"
+                }
+                aria-label={`Opção ${index + 1}`}
+                className="h-11 flex-1 text-base"
+              />
+              {pollOptions.length > POLL_MIN_OPTIONS ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-11 shrink-0"
+                  aria-label={`Tirar a opção ${index + 1}`}
+                  onClick={() => removePollOption(index)}
+                >
+                  <X className="size-4" aria-hidden />
+                </Button>
+              ) : null}
+            </div>
+          ))}
+          <label className="flex items-center gap-2 py-1 text-sm">
+            <input
+              type="checkbox"
+              name="pollMultiple"
+              value="1"
+              checked={pollMultiple}
+              onChange={(event) => setPollMultiple(event.target.checked)}
+              className="accent-primary size-4"
+            />
+            Permitir várias respostas
+          </label>
+          {(state.fieldErrors?.poll ?? pollHint) ? (
+            <p role="alert" className="text-destructive text-xs">
+              {state.fieldErrors?.poll ?? pollHint}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* 3. Onde (obrigatório) */}
       <section className="border-border flex flex-col gap-3 rounded-xl border p-3">
@@ -697,7 +826,9 @@ export function NewPostForm({
       </Button>
       {!canPublish ? (
         <p className="text-muted-foreground -mt-2 text-center text-xs">
-          Precisa de onde você tá e de uma foto, um vídeo, um áudio ou um texto.
+          {pollOn
+            ? "Precisa de onde você tá, da pergunta e de pelo menos duas opções diferentes."
+            : "Precisa de onde você tá e de uma foto, um vídeo, um áudio ou um texto."}
         </p>
       ) : null}
     </form>

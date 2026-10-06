@@ -362,6 +362,9 @@ export const posts = pgTable(
       onDelete: "cascade",
     }),
     floppedAt: text("flopped_at"),
+    // Enquete (docs/08 #57): null num post comum; numa enquete, se dá pra marcar várias
+    // opções. A pergunta é o `body`; as opções moram em `post_poll_options`.
+    pollMultiple: boolean("poll_multiple"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -426,6 +429,49 @@ export const postCommentLikes = pgTable(
   (t) => [primaryKey({ columns: [t.commentId, t.userId] })],
 );
 
+/**
+ * Opções de uma enquete (docs/08 #57), na ordem em que quem criou escreveu. Somem junto
+ * com o post.
+ */
+export const postPollOptions = pgTable(
+  "post_poll_options",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    // Texto puro, no máximo POLL_OPTION_MAX (validado na action).
+    text: text("text").notNull(),
+    position: integer("position").notNull(),
+  },
+  (t) => [index("post_poll_options_post_idx").on(t.postId)],
+);
+
+/**
+ * Votos: uma linha por pessoa e opção. `post_id` repete o da opção de propósito: é por
+ * ele que o feed carrega os votos de vários posts de uma vez e que a action acha "meus
+ * votos nesta enquete" sem join. Somem com a opção, com o post e com a pessoa.
+ */
+export const postPollVotes = pgTable(
+  "post_poll_votes",
+  {
+    optionId: text("option_id")
+      .notNull()
+      .references(() => postPollOptions.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.optionId, t.userId] }),
+    index("post_poll_votes_post_idx").on(t.postId),
+  ],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   places: many(places),
@@ -486,6 +532,20 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   place: one(places, { fields: [posts.placeId], references: [places.id] }),
   reactions: many(postReactions),
   comments: many(postComments),
+  pollOptions: many(postPollOptions),
+}));
+
+export const postPollOptionsRelations = relations(postPollOptions, ({ one, many }) => ({
+  post: one(posts, { fields: [postPollOptions.postId], references: [posts.id] }),
+  votes: many(postPollVotes),
+}));
+
+export const postPollVotesRelations = relations(postPollVotes, ({ one }) => ({
+  option: one(postPollOptions, {
+    fields: [postPollVotes.optionId],
+    references: [postPollOptions.id],
+  }),
+  user: one(users, { fields: [postPollVotes.userId], references: [users.id] }),
 }));
 
 export const postReactionsRelations = relations(postReactions, ({ one }) => ({
@@ -536,3 +596,5 @@ export type NewReviewComment = typeof reviewComments.$inferInsert;
 export type PlaceTag = typeof placeTags.$inferSelect;
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
+export type PostPollOption = typeof postPollOptions.$inferSelect;
+export type PostPollVote = typeof postPollVotes.$inferSelect;

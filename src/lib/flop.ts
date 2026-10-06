@@ -2,13 +2,21 @@ import { and, asc, eq, gt, isNull, lte, ne, notExists, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { db } from "@/lib/db/client";
-import { notifications, postComments, postReactions, posts, users } from "@/lib/db/schema";
+import {
+  notifications,
+  postComments,
+  postPollVotes,
+  postReactions,
+  posts,
+  users,
+} from "@/lib/db/schema";
 import { isPushEnabled, sendPushTo, type PushPayload } from "@/lib/push";
 
 /**
  * Flop de post (docs/08 #50): post que completa 4 horas sem reação nem comentário de
  * outra pessoa vira um aviso no feed, "O post de Fulano flopou 200%", e um push só pro
  * autor, "Seu post flopou 200%". Reagir ou comentar no próprio post não salva ninguém.
+ * Voto de outra pessoa numa enquete (docs/08 #57) conta como reação: salva o post.
  *
  * O aviso é uma linha em `posts` com `flop_of_post_id` apontando pro original (o card
  * do feed reconhece e desenha como fala do app); o original ganha `flopped_at`, que é o
@@ -84,6 +92,12 @@ export async function sweepFlops(now: Date = new Date()): Promise<FloppedPost[]>
             .select({ one: sql`1` })
             .from(postComments)
             .where(and(eq(postComments.postId, posts.id), ne(postComments.userId, posts.userId))),
+        ),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(postPollVotes)
+            .where(and(eq(postPollVotes.postId, posts.id), ne(postPollVotes.userId, posts.userId))),
         ),
       ),
     )

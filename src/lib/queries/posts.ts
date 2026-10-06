@@ -8,6 +8,8 @@ import {
   places,
   postCommentLikes,
   postComments,
+  postPollOptions,
+  postPollVotes,
   postReactions,
   posts,
   users,
@@ -56,7 +58,7 @@ export interface PostFlopRef {
   /** Miniatura da foto (ou da capa do vídeo), quando tinha. */
   thumbUrl: string | null;
   /** O que o post que flopou tinha além de texto. */
-  media: "photo" | "video" | "audio" | null;
+  media: "photo" | "video" | "audio" | "poll" | null;
 }
 
 /** Quanto do texto do post que flopou cabe na prévia do aviso. */
@@ -80,12 +82,34 @@ export interface PostCommentItem {
   likedByMe: boolean;
 }
 
+/** Uma opção da enquete, com a contagem e quem votou (nada é privado no grupo). */
+export interface PollOptionItem {
+  id: string;
+  text: string;
+  votes: number;
+  /** Quem votou nela, do voto mais antigo pro mais novo. */
+  voters: PersonRef[];
+  /** Quem está olhando votou nesta. */
+  mine: boolean;
+}
+
+/** A enquete de um post (docs/08 #57). A pergunta é o `body` do post. */
+export interface PostPoll {
+  /** Dá pra marcar mais de uma opção. */
+  multiple: boolean;
+  /** Pessoas que votaram (com várias respostas, votos ≠ pessoas). */
+  voters: number;
+  options: PollOptionItem[];
+}
+
 export interface PostItem {
   id: string;
   body: string | null;
   photo: PostPhoto | null;
   video: PostVideo | null;
   audio: PostAudio | null;
+  /** Enquete: as opções e os votos. Null num post comum. */
+  poll: PostPoll | null;
   place: PostPlaceRef | null;
   lat: number;
   lng: number;
@@ -149,6 +173,8 @@ const columns = {
   sourceUrl: posts.sourceUrl,
   sourceAuthor: posts.sourceAuthor,
   flopOfPostId: posts.flopOfPostId,
+  pollMultiple: posts.pollMultiple,
+  flopOfPollMultiple: flopOf.pollMultiple,
   flopOfBody: flopOf.body,
   flopOfPhotoId: flopOf.photoId,
   flopOfVideoId: flopOf.videoId,
@@ -184,6 +210,8 @@ type PostRow = {
   sourceUrl: string | null;
   sourceAuthor: string | null;
   flopOfPostId: string | null;
+  pollMultiple: boolean | null;
+  flopOfPollMultiple: boolean | null;
   flopOfBody: string | null;
   flopOfPhotoId: string | null;
   flopOfVideoId: string | null;
@@ -213,7 +241,9 @@ function toFlop(row: PostRow): PostFlopRef | null {
         ? "photo"
         : row.flopOfAudioId
           ? "audio"
-          : null,
+          : row.flopOfPollMultiple !== null
+            ? "poll"
+            : null,
   };
 }
 
@@ -322,11 +352,99 @@ async function loadComments(postIds: string[], viewer: PostViewer | null) {
   return byPost;
 }
 
+/**
+ * Enquetes de vários posts de uma vez: uma query pras opções, outra pros votos (com o
+ * nome e a foto de quem votou). `polls` é id do post → "dá pra marcar várias?".
+ */
+async function loadPolls(polls: Map<string, boolean>, viewerId: string | null) {
+  const byPost = new Map<string, PostPoll>();
+  const postIds = [...polls.keys()];
+  if (postIds.length === 0) return byPost;
+
+  const [options, votes] = await Promise.all([
+    db
+      .select({
+        id: postPollOptions.id,
+        postId: postPollOptions.postId,
+        text: postPollOptions.text,
+      })
+      .from(postPollOptions)
+      .where(inArray(postPollOptions.postId, postIds))
+      .orderBy(asc(postPollOptions.position), asc(postPollOptions.id)),
+    db
+      .select({
+        optionId: postPollVotes.optionId,
+        postId: postPollVotes.postId,
+        userId: users.id,
+        userName: users.name,
+        userAvatarId: users.avatarId,
+      })
+      .from(postPollVotes)
+      .innerJoin(users, eq(users.id, postPollVotes.userId))
+      .where(inArray(postPollVotes.postId, postIds))
+      .orderBy(asc(postPollVotes.createdAt), asc(users.id)),
+  ]);
+
+  const byOption = new Map<string, PollOptionItem>();
+  for (const option of options) {
+    const item: PollOptionItem = {
+      id: option.id,
+      text: option.text,
+      votes: 0,
+      voters: [],
+      mine: false,
+    };
+    byOption.set(option.id, item);
+    const poll = byPost.get(option.postId);
+    if (poll) poll.options.push(item);
+    else {
+      byPost.set(option.postId, {
+        multiple: polls.get(option.postId) === true,
+        voters: 0,
+        options: [item],
+      });
+    }
+  }
+
+  const people = new Map<string, Set<string>>();
+  for (const vote of votes) {
+    const option = byOption.get(vote.optionId);
+    if (!option) continue;
+    option.votes += 1;
+    option.voters.push({ id: vote.userId, name: vote.userName, avatarId: vote.userAvatarId });
+    if (vote.userId === viewerId) option.mine = true;
+    const set = people.get(vote.postId) ?? new Set<string>();
+    set.add(vote.userId);
+    people.set(vote.postId, set);
+  }
+  for (const [postId, set] of people) {
+    const poll = byPost.get(postId);
+    if (poll) poll.voters = set.size;
+  }
+
+  return byPost;
+}
+
+/** A enquete de um post só, como quem está olhando a vê; null se o post não é enquete. */
+export async function getPostPoll(postId: string, viewerId: string | null) {
+  if (typeof postId !== "string" || postId === "") return null;
+  const rows = await db
+    .select({ pollMultiple: posts.pollMultiple })
+    .from(posts)
+    .where(eq(posts.id, postId))
+    .limit(1);
+  const multiple = rows[0]?.pollMultiple;
+  if (multiple === null || multiple === undefined) return null;
+  const polls = await loadPolls(new Map([[postId, multiple]]), viewerId);
+  return polls.get(postId) ?? null;
+}
+
 function toItem(
   row: PostRow,
   viewer: PostViewer | null,
   reactions: ReactionSummary[],
   comments: PostCommentItem[],
+  poll: PostPoll | null,
 ): PostItem {
   return {
     id: row.id,
@@ -343,6 +461,7 @@ function toItem(
           }
         : null,
     audio: toMediaAudio(row),
+    poll,
     place:
       row.placeId && row.placeSlug && row.placeName
         ? {
@@ -365,15 +484,29 @@ function toItem(
   };
 }
 
-/** Completa as linhas com reações e comentários: duas queries pra lista inteira. */
+/**
+ * Completa as linhas com reações, comentários e enquetes: duas queries pra lista
+ * inteira, mais duas só quando algum post da página é enquete.
+ */
 async function hydrate(rows: PostRow[], viewer: PostViewer | null): Promise<PostItem[]> {
   const ids = rows.map((row) => row.id);
-  const [reactions, comments] = await Promise.all([
+  const pollPosts = new Map<string, boolean>();
+  for (const row of rows) {
+    if (row.pollMultiple !== null) pollPosts.set(row.id, row.pollMultiple);
+  }
+  const [reactions, comments, polls] = await Promise.all([
     loadReactions(ids, viewer?.id ?? null),
     loadComments(ids, viewer),
+    loadPolls(pollPosts, viewer?.id ?? null),
   ]);
   return rows.map((row) =>
-    toItem(row, viewer, reactions.get(row.id) ?? [], comments.get(row.id) ?? []),
+    toItem(
+      row,
+      viewer,
+      reactions.get(row.id) ?? [],
+      comments.get(row.id) ?? [],
+      polls.get(row.id) ?? null,
+    ),
   );
 }
 

@@ -23,6 +23,9 @@ erDiagram
   posts ||--o{ post_reactions : recebe
   users ||--o{ post_comments : comenta
   posts ||--o{ post_comments : tem
+  posts ||--o{ post_poll_options : oferece
+  post_poll_options ||--o{ post_poll_votes : recebe
+  users ||--o{ post_poll_votes : vota
   users ||--o{ review_comment_likes : curte
   review_comments ||--o{ review_comment_likes : recebe
   users ||--o{ post_comment_likes : curte
@@ -141,25 +144,26 @@ Arquivos em `UPLOAD_DIR/{id}.webp` e `{id}.thumb.webp`.
 
 Post do feed (docs/01 — Feed): foto, vídeo ou áudio e/ou texto, sempre com quem postou e de onde.
 
-| coluna                    | tipo                 | notas                                                                        |
-| ------------------------- | -------------------- | ---------------------------------------------------------------------------- |
-| id                        | text pk              | `nanoid(12)`                                                                 |
-| user_id                   | fk users (cascade)   | quem postou                                                                  |
-| body                      | text null            | texto puro com quebras de linha, até 1000                                    |
-| photo_id                  | text null            | id da imagem no storage, **sem FK** (não é `photos`)                         |
-| photo_width, photo_height | int null             | dimensões da variante grande                                                 |
-| video_id, video_ext       | text null            | vídeo no storage (`<id>.mp4`/`.webm`), como veio; com vídeo, a foto é a capa |
-| video_width, video_height | int null             | proporção pro card (do `tkhd` do MP4, ou do navegador)                       |
-| audio_id, audio_ext       | text null            | áudio no storage (`<id>.webm`/`.m4a`/`.ogg`/`.mp3`/`.wav`), como veio        |
-| audio_duration_ms         | int null             | duração medida pelo navegador (WebM gravado não sabe a própria duração)      |
-| audio_peaks               | text null            | forma de onda: JSON com até 128 números de 0 a 1, pro player desenhar        |
-| place_id                  | fk places (set null) | quando o post é de um lugar cadastrado                                       |
-| lat, lng                  | real                 | sempre gravadas, mesmo com `place_id`                                        |
-| address                   | text null            | do lugar, ou do reverse geocoding                                            |
-| source_url, source_author | text null            | post importado do Instagram: link canônico e perfil                          |
-| flop_of_post_id           | fk posts (cascade)   | no aviso "O post de Fulano flopou 200%": o post que flopou (migration 0012)  |
-| flopped_at                | text null            | no post que flopou: quando o aviso saiu (nunca sai de novo)                  |
-| created_at, updated_at    | text                 |                                                                              |
+| coluna                    | tipo                 | notas                                                                                |
+| ------------------------- | -------------------- | ------------------------------------------------------------------------------------ |
+| id                        | text pk              | `nanoid(12)`                                                                         |
+| user_id                   | fk users (cascade)   | quem postou                                                                          |
+| body                      | text null            | texto puro com quebras de linha, até 1000                                            |
+| photo_id                  | text null            | id da imagem no storage, **sem FK** (não é `photos`)                                 |
+| photo_width, photo_height | int null             | dimensões da variante grande                                                         |
+| video_id, video_ext       | text null            | vídeo no storage (`<id>.mp4`/`.webm`), como veio; com vídeo, a foto é a capa         |
+| video_width, video_height | int null             | proporção pro card (do `tkhd` do MP4, ou do navegador)                               |
+| audio_id, audio_ext       | text null            | áudio no storage (`<id>.webm`/`.m4a`/`.ogg`/`.mp3`/`.wav`), como veio                |
+| audio_duration_ms         | int null             | duração medida pelo navegador (WebM gravado não sabe a própria duração)              |
+| audio_peaks               | text null            | forma de onda: JSON com até 128 números de 0 a 1, pro player desenhar                |
+| place_id                  | fk places (set null) | quando o post é de um lugar cadastrado                                               |
+| lat, lng                  | real                 | sempre gravadas, mesmo com `place_id`                                                |
+| address                   | text null            | do lugar, ou do reverse geocoding                                                    |
+| source_url, source_author | text null            | post importado do Instagram: link canônico e perfil                                  |
+| flop_of_post_id           | fk posts (cascade)   | no aviso "O post de Fulano flopou 200%": o post que flopou (migration 0012)          |
+| flopped_at                | text null            | no post que flopou: quando o aviso saiu (nunca sai de novo)                          |
+| poll_multiple             | boolean null         | enquete (migration 0001): null num post comum; numa enquete, se dá pra marcar várias |
+| created_at, updated_at    | text                 |                                                                                      |
 
 Índices em `created_at` (a ordem do feed) e `user_id`. As regras "tem `body` **ou** `photo_id`" e "com `place_id`, `lat/lng` são os do lugar" ficam na action (`src/actions/posts.ts`), não no banco. O aviso de flop (docs/08 #50) é uma linha desta tabela assinada pelo autor do post que flopou, com `flop_of_post_id` apontando pra ele e o mesmo "de onde"; o card do feed reconhece pela coluna e desenha como fala do app. A foto usa os mesmos arquivos do storage das outras (`{id}.webp` / `{id}.thumb.webp`) e é apagada junto com a linha.
 
@@ -173,6 +177,13 @@ O mesmo desenho de `review_reactions` / `review_comments`, apontando pra `posts`
 Quem apaga um comentário: quem escreveu, quem postou ou admin (resolvido na query, com o `user_id` do post junto).
 
 Foto ou áudio no comentário (docs/08 #52, migration 0013), tanto em `post_comments` quanto em `review_comments`: `photo_id`, `photo_width`, `photo_height` (o mesmo storage de imagens, `{id}.webp` / `{id}.thumb.webp`, reprocessada em até 1200 px) e `audio_id`, `audio_ext`, `audio_duration_ms`, `audio_peaks` (o mesmo storage e as mesmas regras do áudio de post). Um anexo por comentário — foto e áudio juntos a action recusa. `body` continua `NOT NULL`: comentário só de anexo grava `""` (na época do SQLite, mudar a coluna pra nula exigiria recriar a tabela; no Postgres seria um `ALTER`, mas o `""` já está em produção e o código trata igual). Os arquivos são apagados junto com o comentário, e também quando o post ou a avaliação some (o cascade do banco não sabe de disco: `deletePost`/`deleteReview` recolhem os ids antes).
+
+### post_poll_options e post_poll_votes
+
+Enquete (docs/08 #57, migration `0001_enquete`). O post é a enquete: a pergunta é o `body` e `posts.poll_multiple` diz se dá pra marcar várias opções (null = post comum).
+
+- `post_poll_options`: `id` (`nanoid(12)`), `post_id` (cascade), `text` (até 100), `position` (a ordem em que quem criou escreveu); índice em `post_id`. São criadas na mesma transação do post e não mudam depois.
+- `post_poll_votes`: PK `(option_id, user_id)`, mais `post_id` e `created_at`; índice em `post_id`. O `post_id` repete o da opção de propósito: o feed carrega os votos de uma página inteira com um `IN` e a action acha "meus votos nesta enquete" sem join. Cascade na opção, no post e na pessoa. "Uma resposta só" é regra da action (`nextVotes` em `src/lib/polls.ts`), não do banco.
 
 ### review_comment_likes e post_comment_likes
 

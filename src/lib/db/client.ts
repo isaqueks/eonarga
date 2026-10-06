@@ -2,6 +2,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import type { ExtractTablesWithRelations } from "drizzle-orm";
 import { drizzle as drizzlePostgres } from "drizzle-orm/node-postgres";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { appendFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { Pool, types } from "pg";
 
@@ -33,6 +34,28 @@ const NUMBER_PARSERS: Record<number, (value: string) => number> = {
   1700: Number, // numeric
 };
 
+/**
+ * Depuração: `EONARGA_SQL_LOG=1` imprime cada query no console; qualquer outro valor é o
+ * caminho de um arquivo que recebe uma linha por query, com a hora.
+ */
+const SQL_LOG = process.env.EONARGA_SQL_LOG?.trim() ?? "";
+const LOG_SQL: boolean | { logQuery: (query: string, params: unknown[]) => void } =
+  SQL_LOG === ""
+    ? false
+    : SQL_LOG === "1"
+      ? true
+      : {
+          logQuery(query, params) {
+            const when = new Date().toISOString();
+            const values = JSON.stringify(params).slice(0, 200);
+            try {
+              appendFileSync(SQL_LOG, `${when} ${query.replace(/\s+/g, " ")} -- ${values}\n`);
+            } catch {
+              // log é bônus
+            }
+          },
+        };
+
 interface Created {
   db: Db;
   kind: DbKind;
@@ -61,7 +84,7 @@ function createPostgres(url: string): Created {
   pool.on("error", (error) => {
     console.error("[eonarga] conexão do Postgres caiu:", error.message);
   });
-  const db = drizzlePostgres({ client: pool, schema }) as unknown as Db;
+  const db = drizzlePostgres({ client: pool, schema, logger: LOG_SQL }) as unknown as Db;
   return { db, kind: "postgres", close: () => pool.end() };
 }
 
@@ -94,7 +117,7 @@ function createPglite(target: string): Created {
     },
   });
 
-  const db = drizzle({ client: lazy, schema }) as unknown as Db;
+  const db = drizzle({ client: lazy, schema, logger: LOG_SQL }) as unknown as Db;
   return { db, kind: "pglite", close: async () => await instance?.close() };
 }
 

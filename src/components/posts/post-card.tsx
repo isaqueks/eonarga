@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { AudioPlayer } from "./audio-player";
 import { PostMenu } from "./post-menu";
 import { PostPhoto } from "./post-photo";
+import { PostPoll } from "./post-poll";
 import { PostVideo } from "./post-video";
 
 /** Quem "fala" no aviso de flop: o app, com o rosto do cachorro no lugar do avatar. */
@@ -133,10 +134,18 @@ export function PostCard({ post, className }: { post: PostItem; className?: stri
           <FlopQuote flop={flop} />
         </>
       ) : post.body ? (
-        <p className="text-[0.9375rem] leading-snug whitespace-pre-line">
+        <p
+          className={cn(
+            "text-[0.9375rem] leading-snug whitespace-pre-line",
+            // Numa enquete o texto é a pergunta.
+            post.poll && "font-semibold",
+          )}
+        >
           <MentionText text={post.body} />
         </p>
       ) : null}
+
+      {post.poll ? <PostPoll postId={post.id} poll={post.poll} /> : null}
 
       <ReactionBar
         target={{ type: "post", id: post.id }}
@@ -158,6 +167,7 @@ const FLOP_MEDIA_LABEL: Record<NonNullable<PostFlopRef["media"]>, string> = {
   photo: "uma foto",
   video: "um vídeo",
   audio: "um áudio",
+  poll: "uma enquete",
 };
 
 /**
@@ -185,7 +195,13 @@ function FlopQuote({ flop }: { flop: PostFlopRef }) {
       ) : (
         <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded text-lg">
           <span aria-hidden>
-            {flop.media === "video" ? "🎬" : flop.media === "audio" ? "🎤" : "💬"}
+            {flop.media === "video"
+              ? "🎬"
+              : flop.media === "audio"
+                ? "🎤"
+                : flop.media === "poll"
+                  ? "📊"
+                  : "💬"}
           </span>
         </span>
       )}

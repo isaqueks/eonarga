@@ -59,6 +59,9 @@ export default defineConfig({
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: false,
     timeout: 180_000,
+    // `E2E_SERVER_LOG=1` mostra também o stdout do servidor (cada request e, junto com
+    // `EONARGA_SQL_LOG=1`, cada query): é o que revela onde o dev server travou.
+    stdout: process.env.E2E_SERVER_LOG === "1" ? "pipe" : "ignore",
     env: {
       ...process.env,
       DATABASE_URL: "pglite://./data/e2e-pglite",

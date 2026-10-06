@@ -206,6 +206,25 @@ describe("sweepFlops", () => {
     expect(flopped.map((f) => f.postId).sort()).toEqual([soAutoComentario, soAutoCurtida].sort());
   });
 
+  it("voto de outra pessoa na enquete salva o post; o do próprio autor, não", async () => {
+    const comVoto = await seedPost({ ageHours: 7 });
+    const soAutoVoto = await seedPost({ ageHours: 7 });
+    for (const [postId, userId] of [
+      [comVoto, BIA.id],
+      [soAutoVoto, ANA.id],
+    ] as const) {
+      await db.insert(schema.postPollOptions).values([
+        { id: `${postId}-sim`, postId, text: "Sim", position: 0 },
+        { id: `${postId}-nao`, postId, text: "Não", position: 1 },
+      ]);
+      await db.insert(schema.postPollVotes).values({ optionId: `${postId}-sim`, userId, postId });
+    }
+
+    const flopped = await flop.sweepFlops(NOW);
+
+    expect(flopped.map((f) => f.postId)).toEqual([soAutoVoto]);
+  });
+
   it("respeita a janela: menos de 4 h não flopou ainda, mais de 12 h é deixado em paz", async () => {
     const novo = await seedPost({ ageHours: 3.9 });
     const naJanela = await seedPost({ ageHours: 11.9 });

@@ -1259,3 +1259,201 @@ describe("curtir comentário de post", () => {
     });
   });
 });
+
+describe("enquete (docs/08 #57)", () => {
+  const VIEWER = { id: ANA.id, role: "member" as const };
+
+  function pollForm(fields: Record<string, string>, options: string[]): FormData {
+    const fd = form({ ...AQUI, poll: "1", ...fields });
+    for (const option of options) fd.append("pollOption", option);
+    return fd;
+  }
+
+  /** Publica uma enquete como quem está logado e devolve o post e as opções, na ordem. */
+  async function createPoll(
+    options: string[] = ["Menta", "Uva", "Duas maçãs"],
+    fields: Record<string, string> = {},
+  ) {
+    state.redirects.length = 0;
+    await expect(
+      actions.createPost(empty, pollForm({ body: "Qual narga hoje?", ...fields }, options)),
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+    const post = await onlyPost();
+    const rows = await db
+      .select()
+      .from(schema.postPollOptions)
+      .orderBy(schema.postPollOptions.position);
+    return { post, options: rows };
+  }
+
+  async function pollOf(postId: string, viewer = VIEWER) {
+    const queries = await import("@/lib/queries/posts");
+    return (await queries.getPost(postId, viewer))!.poll!;
+  }
+
+  it("cria o post com a pergunta e as opções na ordem; uma resposta só por padrão", async () => {
+    const { post, options } = await createPoll(["  Menta ", "Uva", "", "Duas maçãs", " "]);
+
+    expect(post).toMatchObject({ body: "Qual narga hoje?", pollMultiple: false, photoId: null });
+    expect(options.map((option) => [option.text, option.position, option.postId])).toEqual([
+      ["Menta", 0, post.id],
+      ["Uva", 1, post.id],
+      ["Duas maçãs", 2, post.id],
+    ]);
+
+    expect(await pollOf(post.id)).toEqual({
+      multiple: false,
+      voters: 0,
+      options: options.map((option) => ({
+        id: option.id,
+        text: option.text,
+        votes: 0,
+        voters: [],
+        mine: false,
+      })),
+    });
+  });
+
+  it("marca várias respostas quando o formulário pede; post comum não vira enquete", async () => {
+    const { post } = await createPoll(["Sim", "Não"], { pollMultiple: "1" });
+    expect(post.pollMultiple).toBe(true);
+
+    await db.delete(schema.posts);
+    await expectRedirect({ ...AQUI, body: "só um texto" });
+    const comum = await onlyPost();
+    expect(comum.pollMultiple).toBeNull();
+    const queries = await import("@/lib/queries/posts");
+    expect((await queries.getPost(comum.id, VIEWER))!.poll).toBeNull();
+    expect(await db.select().from(schema.postPollOptions)).toHaveLength(0);
+  });
+
+  it("recusa sem pergunta, com menos de duas opções, com repetida e com mídia", async () => {
+    const files = () => (fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir).sort() : []);
+    const before = files();
+    expect(await actions.createPost(empty, pollForm({}, ["Sim", "Não"]))).toEqual({
+      ok: false,
+      fieldErrors: { body: "Faz a pergunta da enquete." },
+    });
+    expect(await actions.createPost(empty, pollForm({ body: "E aí?" }, ["Só uma", " "]))).toEqual({
+      ok: false,
+      fieldErrors: { poll: "Enquete precisa de pelo menos duas opções." },
+    });
+    expect(
+      await actions.createPost(empty, pollForm({ body: "E aí?" }, ["Sim", "Não", "sim"])),
+    ).toEqual({ ok: false, fieldErrors: { poll: "Tem opção repetida." } });
+
+    const comFoto = pollForm({ body: "E aí?" }, ["Sim", "Não"]);
+    comFoto.set("photo", await photoFile());
+    expect(await actions.createPost(empty, comFoto)).toEqual({
+      ok: false,
+      fieldErrors: { poll: "Enquete não leva foto, vídeo nem áudio." },
+    });
+
+    expect(await db.select().from(schema.posts)).toHaveLength(0);
+    expect(await db.select().from(schema.postPollOptions)).toHaveLength(0);
+    // A foto recusada nem chegou a ser gravada.
+    expect(files()).toEqual(before);
+  });
+
+  it("uma resposta só: votar em outra troca, tocar na minha tira, e cada um vê o seu", async () => {
+    const { post, options } = await createPoll();
+    const [menta, uva] = options;
+
+    state.user = BIA;
+    const primeiro = await actions.votePoll(post.id, menta.id);
+    expect(primeiro.ok).toBe(true);
+    expect(primeiro.poll).toMatchObject({ multiple: false, voters: 1 });
+    expect(primeiro.poll!.options.map((o) => [o.text, o.votes, o.mine])).toEqual([
+      ["Menta", 1, true],
+      ["Uva", 0, false],
+      ["Duas maçãs", 0, false],
+    ]);
+    expect(primeiro.poll!.options[0].voters).toEqual([
+      { id: BIA.id, name: BIA.name, avatarId: null },
+    ]);
+
+    // Quem criou também vota.
+    state.user = ANA;
+    const daAna = await actions.votePoll(post.id, menta.id);
+    expect(daAna.poll!.options[0]).toMatchObject({ votes: 2, mine: true });
+    expect(daAna.poll!.voters).toBe(2);
+
+    // A Bia muda de ideia: sai da Menta e vai pra Uva.
+    state.user = BIA;
+    const troca = await actions.votePoll(post.id, uva.id);
+    expect(troca.poll!.options.map((o) => [o.text, o.votes, o.mine])).toEqual([
+      ["Menta", 1, false],
+      ["Uva", 1, true],
+      ["Duas maçãs", 0, false],
+    ]);
+    expect(troca.poll!.voters).toBe(2);
+
+    // Tocar na própria opção tira o voto.
+    const tira = await actions.votePoll(post.id, uva.id);
+    expect(tira.poll!.options[1]).toMatchObject({ votes: 0, mine: false, voters: [] });
+    expect(tira.poll!.voters).toBe(1);
+
+    const rows = await db.select().from(schema.postPollVotes);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ optionId: menta.id, userId: ANA.id, postId: post.id });
+
+    // No feed, a Ana vê o voto dela marcado; a Bia, não.
+    expect((await pollOf(post.id)).options[0].mine).toBe(true);
+    expect((await pollOf(post.id, { id: BIA.id, role: "member" })).options[0].mine).toBe(false);
+  });
+
+  it("várias respostas: cada toque liga ou desliga só aquela opção", async () => {
+    const { post, options } = await createPoll(["A", "B", "C"], { pollMultiple: "1" });
+    const [a, b] = options;
+
+    state.user = BIA;
+    await actions.votePoll(post.id, a.id);
+    const dois = await actions.votePoll(post.id, b.id);
+    expect(dois.poll!.options.map((o) => [o.text, o.votes, o.mine])).toEqual([
+      ["A", 1, true],
+      ["B", 1, true],
+      ["C", 0, false],
+    ]);
+    // Dois votos, uma pessoa.
+    expect(dois.poll).toMatchObject({ multiple: true, voters: 1 });
+
+    const um = await actions.votePoll(post.id, a.id);
+    expect(um.poll!.options.map((o) => o.votes)).toEqual([0, 1, 0]);
+    expect(await db.select().from(schema.postPollVotes)).toHaveLength(1);
+  });
+
+  it("recusa opção de outra enquete, id inventado e quem não tem sessão", async () => {
+    const { post, options } = await createPoll();
+    await db.insert(schema.posts).values({
+      id: "outra-enquete",
+      userId: BIA.id,
+      body: "Outra?",
+      lat: -27.5975,
+      lng: -48.55,
+      pollMultiple: false,
+    });
+    await db
+      .insert(schema.postPollOptions)
+      .values({ id: "opcao-alheia", postId: "outra-enquete", text: "Sim", position: 0 });
+
+    const erro = { ok: false, error: "Essa opção não existe mais." };
+    expect(await actions.votePoll(post.id, "opcao-alheia")).toEqual(erro);
+    expect(await actions.votePoll(post.id, "nao-existe")).toEqual(erro);
+    expect(await actions.votePoll("", options[0].id)).toEqual(erro);
+    expect(await db.select().from(schema.postPollVotes)).toHaveLength(0);
+
+    state.user = null;
+    await expect(actions.votePoll(post.id, options[0].id)).rejects.toThrow();
+  });
+
+  it("apagar o post leva as opções e os votos junto", async () => {
+    const { post, options } = await createPoll();
+    state.user = BIA;
+    await actions.votePoll(post.id, options[0].id);
+
+    state.user = ANA;
+    expect(await actions.deletePost(post.id)).toEqual({ ok: true });
+    expect(await db.select().from(schema.postPollOptions)).toHaveLength(0);
+    expect(await db.select().from(schema.postPollVotes)).toHaveLength(0);
+  });
+});

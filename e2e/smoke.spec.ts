@@ -340,7 +340,7 @@ test("login com captcha, cadastro de lugar, status, rolê, mapa e admin", async 
   await page.locator("#testosterone").fill("7000000000000");
   await page.getByRole("button", { name: "Salvar", exact: true }).click();
   await expect(page.getByText("Salvo.")).toBeVisible({ timeout: 30_000 });
-  await page.reload();
+  await recarregar(page);
   await expect(page.locator("#gender")).toHaveValue("Helicóptero de Combate Pesado 🙅");
   await expect(page.locator("#testosterone")).toHaveValue("7000000000000");
   await shot(page, "15-perfil");
@@ -438,6 +438,19 @@ test("link público do lugar abre pra quem não tem conta", async ({ page, brows
  * resolveu antes da gente, a tela já mostra o resumo: aí é o "Trocar" que reabre as
  * três opções.
  */
+/**
+ * Recarrega a página. No servidor de dev, de vez em quando um GET do feed fica sem
+ * resposta com o servidor vivo e o banco respondendo (só visto com o Playwright): em vez
+ * de queimar o tempo do teste inteiro esperando, desiste em 20 s e navega de novo.
+ */
+async function recarregar(page: Page) {
+  try {
+    await page.reload({ timeout: 20_000 });
+  } catch {
+    await page.goto(page.url(), { timeout: 60_000 });
+  }
+}
+
 async function abrirOnde(page: Page) {
   const escolher = page.getByRole("button", { name: "Escolher lugar" });
   const trocar = page.getByRole("button", { name: "Trocar" });
@@ -622,7 +635,7 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await cardTexto.getByRole("button", { name: "Cancelar" }).click();
 
   // A reação vira linha nas novidades e tudo sobrevive a um reload.
-  await page.reload();
+  await recarregar(page);
   await expect(cardTexto.getByRole("button", { name: "Reagir com 🔥 (1)" })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -827,21 +840,92 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await player.getByRole("button", { name: "Velocidade 1×" }).click();
   await expect(player.getByRole("button", { name: "Velocidade 1,5×" })).toBeVisible();
   await shot(page, "22d-feed-com-audio");
-  await player.getByRole("button", { name: "Pausar" }).click();
+  // A gravação tem um segundo e meio: se já acabou de tocar, não tem o que pausar.
+  await player
+    .getByRole("button", { name: "Pausar" })
+    .click({ timeout: 2_000 })
+    .catch(() => {});
+
+  // --- Post 6: enquete (docs/08 #57) ------------------------------------------
+  await page.getByText("📸 Postar").click();
+  await expect(page).toHaveURL(/\/feed\/novo$/);
+  const fazerEnquete = page.getByRole("button", { name: "📊 Fazer enquete" });
+  // O clique pode cair antes da hidratação: repete até o formulário virar enquete.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await fazerEnquete.click();
+    try {
+      await expect(page.getByLabel("Opção 1", { exact: true })).toBeVisible({ timeout: 3_000 });
+      break;
+    } catch {
+      // ainda não pegou: repete
+    }
+  }
+  // Enquete não leva mídia: os botões somem e o texto vira a pergunta.
+  await expect(page.getByRole("button", { name: "📷 Tirar foto" })).toHaveCount(0);
+  await expect(page.getByLabel("Texto do post")).toHaveAttribute(
+    "placeholder",
+    "Qual é a pergunta?",
+  );
+  await page.getByLabel("Texto do post").fill("Qual narga hoje?");
+  await page.getByLabel("Opção 1", { exact: true }).fill("Menta");
+  await page.getByLabel("Opção 2", { exact: true }).fill("menta");
+  await expect(page.getByText("Tem opção repetida.")).toBeVisible();
+  await page.getByLabel("Opção 2", { exact: true }).fill("Uva");
+  // Escreveu na última, nasce mais uma.
+  await page.getByLabel("Opção 3", { exact: true }).fill("Duas maçãs");
+  await abrirOnde(page);
+  await page.getByRole("button", { name: "Escolher lugar" }).click();
+  await page.getByRole("button", { name: /Sebo do João/ }).click();
+  await shot(page, "22f-postar-enquete");
+  await page.getByRole("button", { name: "Publicar" }).click();
+  await page.waitForURL(/\/feed$/);
+
+  const cardEnquete = page.locator("article").filter({ hasText: "Qual narga hoje?" });
+  const enquete = cardEnquete.getByRole("group", { name: "Enquete" });
+  await expect(enquete.getByRole("radio")).toHaveCount(3);
+  await expect(enquete).toContainText("Ninguém votou ainda");
+  const menta = enquete.getByRole("radio", { name: /^Menta/ });
+  const uva = enquete.getByRole("radio", { name: /^Uva/ });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if ((await menta.getAttribute("aria-checked")) !== "true") await menta.click();
+    try {
+      await expect(menta).toBeChecked({ timeout: 3_000 });
+      break;
+    } catch {
+      // clique engolido pela hidratação: repete
+    }
+  }
+  await expect(enquete).toContainText("1 pessoa votou");
+  // Uma resposta só: votar em outra troca o voto.
+  await uva.click();
+  await expect(uva).toBeChecked();
+  await expect(menta).not.toBeChecked();
+  await expect(enquete.getByRole("radio", { name: "Uva, 1 voto" })).toBeVisible();
+  await expect(enquete.getByRole("radio", { name: "Menta, nenhum voto" })).toBeVisible();
+  await enquete.getByRole("button", { name: "Ver votos" }).click();
+  const votos = page.getByRole("dialog");
+  await expect(votos).toContainText("Votos da enquete");
+  await expect(votos.getByText("Admin")).toBeVisible();
+  await shot(page, "22g-enquete-votos");
+  await page.keyboard.press("Escape");
+  await expect(votos).toBeHidden();
+  // O voto está no banco, não só na tela.
+  await recarregar(page);
+  await expect(cardEnquete.getByRole("radio", { name: "Uva, 1 voto" })).toBeChecked();
 
   // --- Flop: 4 h sem ninguém vira aviso do app no feed ----------------------
   // A varredura de verdade roda a cada 5 min no servidor; aqui o admin chama a rota
-  // adiantando o relógio em 7 h. Os cinco posts são do Admin e só têm reação e
-  // comentário dele mesmo, o que não salva ninguém: flopam todos.
+  // adiantando o relógio em 7 h. Os seis posts são do Admin e só têm reação, comentário
+  // e voto dele mesmo, o que não salva ninguém: flopam todos.
   const daquiA7h = new Date(Date.now() + 7 * 3_600_000).toISOString();
   const varredura = await page.request.post("/api/admin/flop-sweep", { data: { now: daquiA7h } });
   expect(varredura.status()).toBe(200);
   const { flopped } = (await varredura.json()) as { flopped: { postId: string }[] };
-  expect(flopped).toHaveLength(5);
+  expect(flopped).toHaveLength(6);
 
-  await page.reload();
+  await recarregar(page);
   const avisos = page.locator("article").filter({ hasText: "O post de Admin flopou 200%" });
-  await expect(avisos).toHaveCount(5);
+  await expect(avisos).toHaveCount(6);
   const avisoTexto = avisos.filter({ hasText: "Tô aqui e tem narga" });
   await expect(avisoTexto.getByText("E o narga?", { exact: true })).toBeVisible();
   await expect(avisoTexto.getByRole("link", { name: /Tô aqui e tem narga/ })).toHaveAttribute(
@@ -875,7 +959,7 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   });
   // O post de texto continua lá; o aviso de flop da foto foi junto com ela.
   await expect(page.getByText("Tô aqui e tem narga")).toHaveCount(2);
-  await expect(avisos).toHaveCount(4);
+  await expect(avisos).toHaveCount(5);
 });
 
 test("página offline é pública e tem a copy do cachorro", async ({ page }) => {
