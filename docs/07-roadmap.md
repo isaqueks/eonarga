@@ -160,6 +160,7 @@ Feita em 02/09/2026, na ordem de custo/benefício:
 - [x] Postgres no lugar do SQLite (0.19.0, docs/08 #55): schema em `pg-core`, migration regerada, driver `pg` em produção e PGlite em dev/teste/e2e (`client.ts` escolhe pela URL), `compose.prod.yml` com `eonarga-db`, migração dos dados via `sqlite3 -json` → `scripts/sqlite-dump-to-sql.ts` → `psql` (ensaiada por `scripts/sqlite-dump-check.ts`), backup diário (`deploy/backup.sh`), deploy construindo a imagem na VPS (`deploy/build-and-up.sh`); testes
 - [x] Lentidão: variante `medium` (800 px) das fotos gerada sob demanda pro card e pro balão de comentário, vídeo só carrega perto da tela, `Cache-Control` de uma semana nos estáticos públicos, `feed/loading.tsx` (0.19.0, docs/08 #56); testes
 - [x] Enquete como tipo de post (0.20.0, docs/08 #57, migration `0001_enquete`): `posts.poll_multiple` + `post_poll_options` + `post_poll_votes`, regras em `lib/polls.ts`, `createPost` com `poll=1` e `votePoll` em `actions/posts.ts`, `PostPoll` no card (voto otimista, rostos, "Ver votos"), modo enquete no formulário de postar, voto de outra pessoa salva do flop; testes e e2e
+- [x] Flop passa de 4 h pra 12 h e a janela máxima de 12 h pra 24 h (0.20.1, docs/08 #58); o e2e adianta o relógio em 13 h
 - [ ] Testar gravação de áudio num iPhone de verdade (Safari grava AAC em MP4) e conferir se o WebM/Opus gravado no Android toca lá
 
 ## Definição de pronto (qualquer tarefa)

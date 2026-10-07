@@ -913,12 +913,12 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await recarregar(page);
   await expect(cardEnquete.getByRole("radio", { name: "Uva, 1 voto" })).toBeChecked();
 
-  // --- Flop: 4 h sem ninguém vira aviso do app no feed ----------------------
+  // --- Flop: 12 h sem ninguém vira aviso do app no feed ---------------------
   // A varredura de verdade roda a cada 5 min no servidor; aqui o admin chama a rota
-  // adiantando o relógio em 7 h. Os seis posts são do Admin e só têm reação, comentário
+  // adiantando o relógio em 13 h. Os seis posts são do Admin e só têm reação, comentário
   // e voto dele mesmo, o que não salva ninguém: flopam todos.
-  const daquiA7h = new Date(Date.now() + 7 * 3_600_000).toISOString();
-  const varredura = await page.request.post("/api/admin/flop-sweep", { data: { now: daquiA7h } });
+  const daquiA13h = new Date(Date.now() + 13 * 3_600_000).toISOString();
+  const varredura = await page.request.post("/api/admin/flop-sweep", { data: { now: daquiA13h } });
   expect(varredura.status()).toBe(200);
   const { flopped } = (await varredura.json()) as { flopped: { postId: string }[] };
   expect(flopped).toHaveLength(6);
@@ -937,7 +937,7 @@ test("postar no feed: lugar, foto no mapa e apagar", async ({ page }) => {
   await shot(page, "22e-feed-flop");
 
   // Segunda passada não flopa ninguém de novo.
-  const deNovo = await page.request.post("/api/admin/flop-sweep", { data: { now: daquiA7h } });
+  const deNovo = await page.request.post("/api/admin/flop-sweep", { data: { now: daquiA13h } });
   expect(((await deNovo.json()) as { flopped: unknown[] }).flopped).toEqual([]);
 
   // --- Apagar o post da foto pelo menu "⋯" ----------------------------------

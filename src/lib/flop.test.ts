@@ -127,10 +127,10 @@ describe("flopBody", () => {
 });
 
 describe("sweepFlops", () => {
-  it("post com 4 h sem ninguém vira aviso no feed e push pro autor", async () => {
+  it("post com 12 h sem ninguém vira aviso no feed e push pro autor", async () => {
     await subscribe("sub-ana", ANA.id);
     await subscribe("sub-bia", BIA.id);
-    const postId = await seedPost({ ageHours: 4.5, body: "ninguém viu isso", placeId: null });
+    const postId = await seedPost({ ageHours: 12.5, body: "ninguém viu isso", placeId: null });
 
     const flopped = await flop.sweepFlops(NOW);
 
@@ -183,10 +183,10 @@ describe("sweepFlops", () => {
   });
 
   it("reação ou comentário de outra pessoa salva o post; do próprio autor, não", async () => {
-    const comReacao = await seedPost({ ageHours: 7 });
-    const comComentario = await seedPost({ ageHours: 7 });
-    const soAutoCurtida = await seedPost({ ageHours: 7 });
-    const soAutoComentario = await seedPost({ ageHours: 7 });
+    const comReacao = await seedPost({ ageHours: 14 });
+    const comComentario = await seedPost({ ageHours: 14 });
+    const soAutoCurtida = await seedPost({ ageHours: 14 });
+    const soAutoComentario = await seedPost({ ageHours: 14 });
 
     await db
       .insert(schema.postReactions)
@@ -207,8 +207,8 @@ describe("sweepFlops", () => {
   });
 
   it("voto de outra pessoa na enquete salva o post; o do próprio autor, não", async () => {
-    const comVoto = await seedPost({ ageHours: 7 });
-    const soAutoVoto = await seedPost({ ageHours: 7 });
+    const comVoto = await seedPost({ ageHours: 14 });
+    const soAutoVoto = await seedPost({ ageHours: 14 });
     for (const [postId, userId] of [
       [comVoto, BIA.id],
       [soAutoVoto, ANA.id],
@@ -225,10 +225,10 @@ describe("sweepFlops", () => {
     expect(flopped.map((f) => f.postId)).toEqual([soAutoVoto]);
   });
 
-  it("respeita a janela: menos de 4 h não flopou ainda, mais de 12 h é deixado em paz", async () => {
-    const novo = await seedPost({ ageHours: 3.9 });
-    const naJanela = await seedPost({ ageHours: 11.9 });
-    const velho = await seedPost({ ageHours: 12.1 });
+  it("respeita a janela: menos de 12 h não flopou ainda, mais de 24 h é deixado em paz", async () => {
+    const novo = await seedPost({ ageHours: 11.9 });
+    const naJanela = await seedPost({ ageHours: 23.9 });
+    const velho = await seedPost({ ageHours: 24.1 });
 
     const flopped = await flop.sweepFlops(NOW);
 
@@ -238,7 +238,7 @@ describe("sweepFlops", () => {
   });
 
   it("nunca flopa duas vezes, nem flopa o próprio aviso", async () => {
-    const postId = await seedPost({ ageHours: 8 });
+    const postId = await seedPost({ ageHours: 14 });
 
     const first = await flop.sweepFlops(NOW);
     expect(first).toHaveLength(1);
@@ -253,8 +253,8 @@ describe("sweepFlops", () => {
 
   it("aviso apagado não volta; original apagado leva o aviso junto", async () => {
     const { eq } = await import("drizzle-orm");
-    const a = await seedPost({ ageHours: 8 });
-    const b = await seedPost({ ageHours: 8 });
+    const a = await seedPost({ ageHours: 14 });
+    const b = await seedPost({ ageHours: 14 });
     const [flopA, flopB] = await flop.sweepFlops(NOW);
 
     await db.delete(schema.posts).where(eq(schema.posts.id, flopA.flopPostId));
@@ -270,7 +270,7 @@ describe("sweepFlops", () => {
   it("com push desligado o aviso vai pro feed do mesmo jeito, sem push nem histórico", async () => {
     delete process.env.VAPID_PRIVATE_KEY;
     await subscribe("sub-ana", ANA.id);
-    const postId = await seedPost({ ageHours: 9 });
+    const postId = await seedPost({ ageHours: 15 });
 
     const flopped = await flop.sweepFlops(NOW);
 
@@ -283,7 +283,7 @@ describe("sweepFlops", () => {
   it("push que falha não desfaz o aviso", async () => {
     webpush.sendNotification.mockRejectedValue(new Error("serviço fora"));
     await subscribe("sub-ana", ANA.id);
-    const postId = await seedPost({ ageHours: 9 });
+    const postId = await seedPost({ ageHours: 15 });
 
     const flopped = await flop.sweepFlops(NOW);
 
